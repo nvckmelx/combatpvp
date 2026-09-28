@@ -10,9 +10,9 @@ import {
   Side,
   Who,
   botChoose,
+  FIGHTERS,
   createRng,
   mirror,
-  otherFighter,
 } from '@hj/shared';
 import { net } from './net';
 
@@ -106,10 +106,12 @@ export class LocalSession implements MatchSession {
     settings: BoutSettings,
   ) {
     const botName = BOTS.find((b) => b.id === bot)?.name ?? 'Бот';
+    // Бот выходит любым из остальных бойцов — так в спарринге встречаются все трое.
+    const botFighter = this.rng.pick(FIGHTERS.filter((f) => f.id !== playerFighter)).id;
     this.host = new BoutHost({
       settings,
       names: [playerName, botName],
-      fighters: [playerFighter, otherFighter(playerFighter)],
+      fighters: [playerFighter, botFighter],
       scheduler: browserScheduler,
       onChange: () => this.changed(),
     });
