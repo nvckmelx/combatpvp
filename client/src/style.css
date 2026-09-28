@@ -1031,6 +1031,52 @@ h4 {
   pointer-events: none;
 }
 
+/* Арена из арта: свой пол и толпа уже нарисованы — плиты кода становятся прозрачными, трещины остаются. */
+.has-arena .crowd {
+  display: none;
+}
+
+.has-arena .plate {
+  border-color: transparent;
+  background: none;
+}
+
+.has-arena .plate[data-cracks='3'] {
+  background: none;
+  box-shadow: none;
+}
+
+/* Толпа из арта поднимается вместе с Накалом. */
+.crowd-art {
+  position: absolute;
+  left: -4%;
+  right: -4%;
+  top: 22%;
+  height: 20%;
+  background: center bottom / cover no-repeat;
+  opacity: 0;
+  transform: translateY(35%);
+  transition: opacity 0.6s, transform 0.6s;
+  pointer-events: none;
+}
+
+.scene[data-heat='1'] .crowd-art {
+  opacity: 0.35;
+  transform: translateY(22%);
+}
+
+.scene[data-heat='2'] .crowd-art {
+  opacity: 0.7;
+  transform: translateY(10%);
+  animation: crowd 0.9s ease-in-out infinite;
+}
+
+.scene[data-heat='3'] .crowd-art {
+  opacity: 0.95;
+  transform: none;
+  animation: crowd 0.55s ease-in-out infinite;
+}
+
 /* Пол: три линии чугунных плит в перспективе. */
 .floor {
   position: absolute;
@@ -1465,6 +1511,187 @@ h4 {
 
 .burst-dust.art {
   background: url('/art/vfx/dust.webp') center / contain no-repeat;
+}
+
+.burst-sweat,
+.burst-whoosh {
+  opacity: 0;
+}
+
+.burst-sweat.art {
+  width: 150px;
+  height: 150px;
+  background: url('/art/vfx/sweat.webp') center / contain no-repeat;
+  animation: burst 0.7s ease-out forwards;
+}
+
+.burst-whoosh.art {
+  width: 210px;
+  height: 140px;
+  background: url('/art/vfx/whoosh.webp') center / contain no-repeat;
+  animation: whoosh 0.55s ease-out forwards;
+}
+
+.burst.mirrored {
+  scale: -1 1;
+}
+
+@keyframes whoosh {
+  0% {
+    transform: translate(-60%, -50%);
+    opacity: 0.95;
+  }
+  100% {
+    transform: translate(-40%, -50%);
+    opacity: 0;
+  }
+}
+
+/* Сокрушение: комикс-сплэш на весь экран. */
+.splash {
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  background: center / cover no-repeat;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.splash.show {
+  animation: splash 0.75s ease-out forwards;
+}
+
+@keyframes splash {
+  0% {
+    opacity: 0;
+    transform: scale(1.25);
+  }
+  15% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.04);
+  }
+}
+
+/* Экран VS перед боем. */
+.vs {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 6%;
+  pointer-events: none;
+}
+
+.vs.show {
+  display: flex;
+  animation: vs-out 1.9s ease-in forwards;
+}
+
+.vs-bg {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, #5a1012 0 49.5%, #d9d0c8 49.5% 50.5%, #24252a 50.5%) center / cover no-repeat;
+}
+
+.vs-side {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 38%;
+}
+
+.vs-side .portrait {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  border-width: 3px;
+}
+
+.vs-opp .portrait {
+  border-color: var(--steel);
+  transform: scaleX(-1);
+}
+
+.vs-side strong {
+  font-family: var(--display);
+  font-size: 16px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-align: center;
+  text-shadow: 0 2px 0 #000;
+}
+
+.vs-you {
+  animation: vs-in-left 0.4s ease-out both;
+}
+
+.vs-opp {
+  animation: vs-in-right 0.4s ease-out both;
+}
+
+.vs-mark {
+  position: relative;
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 54px;
+  color: #fff;
+  text-shadow: 0 3px 0 #000, 0 0 24px var(--blood);
+  animation: vs-pop 0.5s 0.25s ease-out both;
+}
+
+.vs-round {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 14%;
+  text-align: center;
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 26px;
+  letter-spacing: 0.2em;
+  color: var(--blood-hi);
+  text-shadow: 0 2px 0 #000;
+  animation: vs-pop 0.4s 0.7s ease-out both;
+}
+
+@keyframes vs-in-left {
+  from {
+    transform: translateX(-120%);
+  }
+}
+
+@keyframes vs-in-right {
+  from {
+    transform: translateX(120%);
+  }
+}
+
+@keyframes vs-pop {
+  from {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+
+@keyframes vs-out {
+  0%,
+  78% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
 }
 
 @keyframes burst {

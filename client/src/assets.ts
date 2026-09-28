@@ -21,6 +21,7 @@ export const art = {
   crack: (stage: number) => `${ART_ROOT}/arena/crack_${stage}.webp`,
   crowd: () => `${ART_ROOT}/arena/crowd.webp`,
   vfx: (name: 'impact' | 'sweat' | 'dust' | 'whoosh' | 'crush_splash') => `${ART_ROOT}/vfx/${name}.webp`,
+  ui: (name: 'vs_bg') => `${ART_ROOT}/ui/${name}.webp`,
 };
 
 const probes = new Map<string, Promise<boolean>>();

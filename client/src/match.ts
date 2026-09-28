@@ -124,11 +124,15 @@ export function matchScreen(root: HTMLElement, session: MatchSession, nav: Match
   const bubbleOpp = h('div', { class: 'bubble bubble-opp' });
   const bubbleYou = h('div', { class: 'bubble bubble-you' });
   const sceneBg = h('div', { class: 'scene-bg' });
+  const crowdArt = h('div', { class: 'crowd-art' });
+  const splash = h('div', { class: 'splash' });
+  const vs = h('div', { class: 'vs' });
   const stage = h(
     'div',
     { class: 'stage' },
     sceneBg,
     h('div', { class: 'crowd' }),
+    crowdArt,
     floor,
     actorOppFeint,
     actorOpp,
@@ -143,11 +147,17 @@ export function matchScreen(root: HTMLElement, session: MatchSession, nav: Match
   );
   const banner = h('div', { class: 'banner' });
   const midInfo = h('div', { class: 'mid-info' });
-  const scene = h('main', { class: 'scene' }, stage, h('div', { class: 'letterbox top' }), h('div', { class: 'letterbox bottom' }), midInfo, banner);
+  const scene = h('main', { class: 'scene' }, stage, h('div', { class: 'letterbox top' }), h('div', { class: 'letterbox bottom' }), midInfo, banner, splash, vs);
 
   const landscape = window.matchMedia('(min-aspect-ratio: 1/1)').matches;
   const pitUrl = art.arena(landscape ? 'landscape' : 'portrait');
-  void probe(pitUrl).then((ok) => ok && (sceneBg.style.backgroundImage = `url(${pitUrl})`));
+  void probe(pitUrl).then((ok) => {
+    if (!ok) return;
+    sceneBg.style.backgroundImage = `url(${pitUrl})`;
+    scene.classList.add('has-arena');
+  });
+  void probe(art.crowd()).then((ok) => ok && (crowdArt.style.backgroundImage = `url(${art.crowd()})`));
+  void probe(art.vfx('crush_splash')).then((ok) => ok && (splash.style.backgroundImage = `url(${art.vfx('crush_splash')})`));
   [1, 2, 3].forEach((n) => void probe(art.crack(n)).then((ok) => ok && floor.classList.add(`art-crack-${n}`)));
 
   // ---------- Панель выбора ----------
@@ -446,8 +456,8 @@ export function matchScreen(root: HTMLElement, session: MatchSession, nav: Match
     setTimeout(() => el.remove(), 1900);
   }
 
-  function burst(x: number, y: number, kind: 'impact' | 'dust'): void {
-    const el = h('div', { class: `burst burst-${kind}`, style: { left: `${x}%`, top: `${y}%` } });
+  function burst(x: number, y: number, kind: 'impact' | 'dust' | 'sweat' | 'whoosh', mirrored = false): void {
+    const el = h('div', { class: `burst burst-${kind}${mirrored ? ' mirrored' : ''}`, style: { left: `${x}%`, top: `${y}%` } });
     void probe(art.vfx(kind)).then((ok) => ok && el.classList.add('art'));
     fx.append(el);
     setTimeout(() => el.remove(), 900);
@@ -575,16 +585,24 @@ export function matchScreen(root: HTMLElement, session: MatchSession, nav: Match
     else if (ex.you.hit) {
       oppSprite.set(dirYou ? 'hit_side' : 'hit_center', dirYou < 0);
       burst(OPP_X[ex.opp.step], OPP_HEAD_Y, 'impact');
+      burst(OPP_X[ex.opp.step] + (dirYou < 0 ? -6 : 6), OPP_HEAD_Y - 2, 'sweat', dirYou < 0);
       flashes.push(() => popup(OPP_X[ex.opp.step], OPP_HEAD_Y - 6, `−${ex.you.hitDamage}`, breakdownText(ex.you.breakdown), 'dmg you'));
       maxDmg = Math.max(maxDmg, ex.you.hitDamage);
-    } else popup(OPP_X[ex.you.strike], OPP_HEAD_Y, 'МИМО', '', 'miss');
+    } else {
+      burst(OPP_X[ex.you.strike], OPP_HEAD_Y, 'whoosh', dirYou < 0);
+      popup(OPP_X[ex.you.strike], OPP_HEAD_Y, 'МИМО', '', 'miss');
+    }
     if (ex.opp.caught) popup(YOU_X[ex.you.feint ?? ex.opp.strike], YOU_HEAD_Y, 'ФИНТ!', 'удар провалился', 'feint');
     else if (ex.opp.hit) {
       youSprite.set('hit', dirOpp < 0);
       burst(YOU_X[ex.you.step], YOU_HEAD_Y, 'impact');
+      burst(YOU_X[ex.you.step] + (dirOpp < 0 ? -6 : 6), YOU_HEAD_Y - 2, 'sweat', dirOpp < 0);
       flashes.push(() => popup(YOU_X[ex.you.step], YOU_HEAD_Y - 4, `−${ex.opp.hitDamage}`, breakdownText(ex.opp.breakdown), 'dmg opp'));
       maxDmg = Math.max(maxDmg, ex.opp.hitDamage);
-    } else popup(YOU_X[ex.opp.strike], YOU_HEAD_Y, 'МИМО', '', 'miss');
+    } else {
+      burst(YOU_X[ex.opp.strike], YOU_HEAD_Y, 'whoosh', dirOpp < 0);
+      popup(YOU_X[ex.opp.strike], YOU_HEAD_Y, 'МИМО', '', 'miss');
+    }
     if (ex.you.countered) {
       oppSprite.set('hit_center');
       flashes.push(() => setTimeout(() => popup(OPP_X[ex.opp.step], OPP_HEAD_Y + 6, `−${ex.you.counterDamage}`, 'Контра', 'dmg you'), 240));
@@ -594,6 +612,11 @@ export function matchScreen(root: HTMLElement, session: MatchSession, nav: Match
       youSprite.set('hit');
       flashes.push(() => setTimeout(() => popup(YOU_X[ex.you.step], YOU_HEAD_Y + 6, `−${ex.opp.counterDamage}`, 'Контра', 'dmg opp'), 240));
       maxDmg = Math.max(maxDmg, ex.opp.counterDamage);
+    }
+    if (ex.you.breakdown?.crush || ex.opp.breakdown?.crush) {
+      splash.classList.remove('show');
+      void splash.offsetWidth;
+      splash.classList.add('show');
     }
     if (maxDmg > 0) {
       scene.classList.add('flash');
@@ -638,6 +661,22 @@ export function matchScreen(root: HTMLElement, session: MatchSession, nav: Match
     animating = false;
   }
 
+  /** Экран VS перед боем: портреты въезжают с двух сторон. */
+  function showVersus(v: PlayerView): void {
+    if (reducedMotion()) return;
+    vs.replaceChildren(
+      h('div', { class: 'vs-bg' }),
+      h('div', { class: 'vs-side vs-you' }, portrait(v.you.fighter), h('strong', null, v.you.name)),
+      h('div', { class: 'vs-mark' }, 'VS'),
+      h('div', { class: 'vs-side vs-opp' }, portrait(v.opp.fighter), h('strong', null, v.opp.name)),
+      h('div', { class: 'vs-round' }, 'РАУНД 1 · БОЙ!'),
+    );
+    void probe(art.ui('vs_bg')).then((ok) => ok && ((vs.firstElementChild as HTMLElement).style.backgroundImage = `url(${art.ui('vs_bg')})`));
+    vs.classList.remove('show');
+    void vs.offsetWidth;
+    vs.classList.add('show');
+  }
+
   // ---------- Приём состояния ----------
   function showOverlay(key: string, panel: () => HTMLElement): void {
     if (overlayKey === key) return;
@@ -651,6 +690,8 @@ export function matchScreen(root: HTMLElement, session: MatchSession, nav: Match
     const key = `${v.boutId}:${v.roundNo}:${v.exchangeNo}`;
     if (v.phase === 'choose' && key !== exchangeKey) {
       exchangeKey = key;
+      if (v.exchangeNo === 1 && v.roundNo === 1) showVersus(v);
+      else if (v.exchangeNo === 1) showBanner(`РАУНД ${v.roundNo}`, 'clash big', 1100);
       sel = { step: null, strike: null, feint: null, feintMode: false, sealed: v.you.ready };
       lastTick = -1;
       if (v.heat >= BALANCE.heat.max) sfx.heartbeat();
@@ -719,6 +760,10 @@ export function matchScreen(root: HTMLElement, session: MatchSession, nav: Match
 
   session.onView = apply;
   session.onEmote = (from, id) => {
+    if (from === 'opp' && !animating && view?.phase === 'choose') {
+      oppSprite.set('taunt');
+      setTimeout(() => !animating && oppSprite.set('idle'), 1400);
+    }
     const bubble = from === 'you' ? bubbleYou : bubbleOpp;
     const actor = from === 'you' ? actorYou : actorOpp;
     bubble.textContent = EMOTES[id] ?? '';
