@@ -1,4 +1,4 @@
-import { BALANCE, DamageBreakdown, EMOTES, ExchangeView, LANES, Lane, MoveView, PlayerView, Who, byCount } from '@hj/shared';
+import { BALANCE, Balance, DamageBreakdown, EMOTES, ExchangeView, LANES, Lane, MoveView, PlayerView, Who, balanceFor, byCount } from '@hj/shared';
 import { art, preloadFighter, probe } from './assets';
 import { sfx } from './audio';
 import { LANE_SHORT, dossierPanel, resultPanel } from './overlays';
@@ -73,6 +73,7 @@ export function matchScreen(root: HTMLElement, session: MatchSession, nav: Match
     const ready = h('span', { class: 'chip chip-ready' }, 'ГОТОВ');
     const offline = h('span', { class: 'chip chip-off' }, 'НЕ В СЕТИ');
     const feint = h('span', { class: 'chip chip-feint' }, 'ФИНТ');
+    const edge = h('span', { class: `chip chip-edge chip-edge-${who}` }, who === 'you' ? 'НА ГРАНИ' : 'ДОБЕЙ');
     const fill = h('span', { class: 'hpbar-fill' });
     const ghost = h('span', { class: 'hpbar-ghost' });
     const hpNum = h('span', { class: 'hp-num' });
@@ -86,11 +87,11 @@ export function matchScreen(root: HTMLElement, session: MatchSession, nav: Match
       h('div', { class: 'fcard-body' },
         h('div', { class: 'fcard-name' }, name, ready, offline, feint),
         h('div', { class: 'hpbar' }, ghost, fill, hpNum),
-        h('div', { class: 'fcard-sub' }, wins, streak),
+        h('div', { class: 'fcard-sub' }, wins, streak, edge),
         ribbon,
       ),
     );
-    return { el, face, name, ready, offline, feint, fill, ghost, hpNum, wins, streak, ribbon };
+    return { el, face, name, ready, offline, feint, edge, fill, ghost, hpNum, wins, streak, ribbon };
   };
   const youCard = card('you');
   const oppCard = card('opp');
@@ -129,6 +130,7 @@ export function matchScreen(root: HTMLElement, session: MatchSession, nav: Match
   const crowdArt = h('div', { class: 'crowd-art' });
   const splash = h('div', { class: 'splash' });
   const vs = h('div', { class: 'vs' });
+  const condCard = h('div', { class: 'cond-card', 'aria-live': 'polite' });
   const stage = h(
     'div',
     { class: 'stage' },
@@ -149,7 +151,7 @@ export function matchScreen(root: HTMLElement, session: MatchSession, nav: Match
   );
   const banner = h('div', { class: 'banner' });
   const midInfo = h('div', { class: 'mid-info' });
-  const scene = h('main', { class: 'scene' }, stage, h('div', { class: 'letterbox top' }), h('div', { class: 'letterbox bottom' }), midInfo, banner, splash, vs);
+  const scene = h('main', { class: 'scene' }, stage, h('div', { class: 'letterbox top' }), h('div', { class: 'letterbox bottom' }), midInfo, banner, condCard, splash, vs);
 
   const landscape = window.matchMedia('(min-aspect-ratio: 1/1)').matches;
   const pitUrl = art.arena(landscape ? 'landscape' : 'portrait');
@@ -308,6 +310,8 @@ export function matchScreen(root: HTMLElement, session: MatchSession, nav: Match
 
   function renderHud(v: PlayerView): void {
     setFighters(v);
+    const bal = roundBalance(v);
+    const choosing = v.phase === 'choose';
     for (const who of ['you', 'opp'] as Who[]) {
       const f = v[who];
       const c = who === 'you' ? youCard : oppCard;
@@ -315,6 +319,10 @@ export function matchScreen(root: HTMLElement, session: MatchSession, nav: Match
       c.ready.hidden = !(who === 'opp' && v.phase === 'choose' && f.ready);
       c.offline.hidden = f.connected;
       c.feint.hidden = f.feint !== 'ready';
+      // Один удар до нокаута: подсказка добить соперника или беречься самому.
+      const target: Who = who === 'you' ? 'you' : 'opp';
+      const lethal = f.hp > 0 && LANES.some((l) => expectedDamage(v, l, target) >= f.hp);
+      c.edge.hidden = !(choosing && lethal && !v.suddenDeath);
       const pct = `${(Math.max(0, f.hp) / f.maxHp) * 100}%`;
       c.fill.style.width = pct;
       c.ghost.style.width = pct;
@@ -325,16 +333,18 @@ export function matchScreen(root: HTMLElement, session: MatchSession, nav: Match
         ...(f.streak > 0 ? [h('span', { class: 'streak-label' }, 'СЕРИЯ'), ...Array.from({ length: Math.min(f.streak, 5) }, () => h('span', { class: 'notch' }))] : []),
       );
       const moves = v.ribbon[who];
-      c.ribbon.replaceChildren(...(moves === null ? [h('span', { class: 'fog' }, 'ТУМАН')] : moves.map(ribbonCell)));
+      const hidden = v.condition.id === 'smoke' ? 'ДЫМ' : 'ТУМАН';
+      c.ribbon.replaceChildren(...(moves === null ? [h('span', { class: 'fog' }, hidden)] : moves.map(ribbonCell)));
     }
     roundInfo.textContent = `РАУНД ${v.roundNo} · СХОД ${v.phase === 'choose' ? v.exchangeNo : Math.max(1, v.exchangeNo - 1)}`;
     const labels: string[] = [];
+    if (v.condition.id !== 'clean') labels.push(v.condition.name);
     if (v.suddenDeath) labels.push('ПОСЛЕДНИЙ СХОД');
     if (v.fatigue && v.phase === 'choose') labels.push('УСТАЛОСТЬ: УРОН ВЫШЕ');
     if (!session.online) labels.push('СПАРРИНГ');
     midInfo.textContent = labels.join(' · ');
     renderHeat(v.heat);
-    plates.forEach((p, l) => (p.dataset.cracks = String(Math.min(v.cracks[l], BALANCE.plates.cracksToBreak))));
+    plates.forEach((p, l) => (p.dataset.cracks = String(Math.min(v.cracks[l], bal.plates.cracksToBreak) + (v.cracks[l] >= bal.plates.cracksToBreak ? 3 - bal.plates.cracksToBreak : 0))));
   }
 
   function renderHeat(heat: number): void {
@@ -343,14 +353,20 @@ export function matchScreen(root: HTMLElement, session: MatchSession, nav: Match
     scene.dataset.heat = String(heat);
   }
 
+  /** Баланс текущего раунда с учётом условия Ямы. */
+  function roundBalance(v: PlayerView): Balance {
+    return balanceFor(v.condition.id);
+  }
+
   /** Урон по тому, кто окажется на линии lane (без Серии — она зависит от исхода). */
   function expectedDamage(v: PlayerView, lane: Lane, target: Who): number {
+    const bal = roundBalance(v);
     const t = v[target];
-    const base = v.fatigue ? BALANCE.fatigue.baseDamage : BALANCE.baseDamage;
+    const base = v.fatigue ? bal.fatigue.baseDamage : bal.baseDamage;
     const nextStay = t.stay > 0 && lane === t.lane ? t.stay + 1 : 1;
-    const dug = byCount(BALANCE.dug.bonusByStay, nextStay);
-    const plate = v.cracks[lane] >= BALANCE.plates.cracksToBreak ? BALANCE.plates.brokenBonus : 0;
-    return base + v.heat + dug + plate;
+    const dug = byCount(bal.dug.bonusByStay, nextStay);
+    const plate = v.cracks[lane] >= bal.plates.cracksToBreak ? bal.plates.brokenBonus : 0;
+    return Math.min(bal.hitDamage.max, base + v.heat + dug + plate);
   }
 
   function renderChoice(): void {
@@ -361,6 +377,8 @@ export function matchScreen(root: HTMLElement, session: MatchSession, nav: Match
     screen.classList.toggle('sealed', choosing && sel.sealed);
     screen.classList.toggle('feint-mode', sel.feintMode);
 
+    const bal = roundBalance(v);
+    const dashing = sel.step !== null && Math.abs(sel.step - v.you.lane) === 2 && bal.dashPenalty;
     stepBtns.forEach(({ btn, sub, tag }, l) => {
       const lane = l as Lane;
       const dash = Math.abs(lane - v.you.lane) === 2;
@@ -369,19 +387,22 @@ export function matchScreen(root: HTMLElement, session: MatchSession, nav: Match
       btn.classList.toggle('feint-pick', sel.feint === lane);
       btn.classList.toggle('hot', choosing && risk >= 4);
       btn.disabled = !choosing || sel.sealed;
+      btn.classList.toggle('lethal', choosing && risk >= v.you.hp);
       sub.textContent = choosing ? `по тебе ${risk}` : '';
-      tag.textContent = choosing ? (dash ? 'РЫВОК' : lane === v.you.lane && v.you.stay > 0 ? 'НА МЕСТЕ' : '') : '';
+      tag.textContent = choosing ? (dash ? (bal.dashPenalty ? 'РЫВОК' : 'РЫВОК · СКОЛЬЗЬ') : lane === v.you.lane && v.you.stay > 0 ? 'НА МЕСТЕ' : '') : '';
     });
     strikeBtns.forEach(({ btn, sub, tag }, l) => {
       const lane = l as Lane;
-      const predictable = v.you.lastStrike === lane && v.you.strikeRepeat + 1 >= BALANCE.predictable.from;
-      const dmg = Math.max(1, expectedDamage(v, lane, 'opp') - (predictable ? BALANCE.predictable.penalty : 0));
+      const predictable = v.you.lastStrike === lane && v.you.strikeRepeat + 1 >= bal.predictable.from;
+      // С Рывка удар вполсилы — кнопки удара это показывают сразу, как выбран Рывок.
+      const dmg = dashing ? bal.dashDamage : Math.max(bal.hitDamage.min, expectedDamage(v, lane, 'opp') - (predictable ? bal.predictable.penalty : 0));
       btn.classList.toggle('selected', sel.strike === lane);
       btn.classList.toggle('hot', choosing && dmg >= 4);
       btn.classList.toggle('opp-here', choosing && lane === v.opp.lane);
+      btn.classList.toggle('lethal', choosing && dmg >= v.opp.hp);
       btn.disabled = !choosing || sel.sealed;
-      sub.textContent = choosing ? `урон ${dmg}` : '';
-      tag.textContent = choosing && lane === v.opp.lane ? 'ОН ТУТ' : '';
+      sub.textContent = choosing ? `урон ${dmg}${dashing ? ' · рывок' : ''}` : '';
+      tag.textContent = choosing ? (dmg >= v.opp.hp ? 'НОКАУТ' : lane === v.opp.lane ? 'ОН ТУТ' : predictable ? 'ЧИТАЕМО' : '') : '';
     });
 
     if (!animating) {
@@ -431,7 +452,8 @@ export function matchScreen(root: HTMLElement, session: MatchSession, nav: Match
     const left = deadline ? Math.max(0, deadline - performance.now()) : 0;
     if (v && v.phase === 'choose' && deadline && !animating) {
       const total = v.settings.timerSec * 1000;
-      const secs = Math.ceil(left / 1000);
+      // Первый сход раунда идёт с запасом на заставку — на часах его не показываем.
+      const secs = Math.min(v.settings.timerSec, Math.ceil(left / 1000));
       timerBar.style.transform = `scaleX(${Math.min(1, left / total)})`;
       clock.textContent = String(secs);
       clock.classList.toggle('urgent', secs <= 3 && !sel.sealed);
@@ -467,8 +489,10 @@ export function matchScreen(root: HTMLElement, session: MatchSession, nav: Match
 
   function breakdownText(b: DamageBreakdown | null): string {
     if (!b) return '';
+    const parts0: string[] = [];
     if (b.dash) return 'Рывок — вполсилы';
-    const parts = [`база ${b.base}`];
+    if (b.crush) parts0.push('СОКРУШЕНИЕ');
+    const parts = [...parts0, `база ${b.base}`];
     if (b.streak) parts.push(`Серия +${b.streak}`);
     if (b.heat) parts.push(`Накал +${b.heat}`);
     if (b.dug) parts.push(`Вкопался +${b.dug}`);
@@ -530,7 +554,7 @@ export function matchScreen(root: HTMLElement, session: MatchSession, nav: Match
     readyBtn.disabled = true;
     feintBtn.hidden = true;
     [...stepBtns, ...strikeBtns].forEach(({ btn, sub, tag }) => {
-      btn.classList.remove('selected', 'feint-pick', 'hot', 'opp-here');
+      btn.classList.remove('selected', 'feint-pick', 'hot', 'opp-here', 'lethal');
       btn.disabled = true;
       sub.textContent = '';
       tag.textContent = '';
@@ -679,6 +703,20 @@ export function matchScreen(root: HTMLElement, session: MatchSession, nav: Match
     vs.classList.add('show');
   }
 
+  /** Карточка условия Ямы в начале раунда. */
+  function showCondition(v: PlayerView): void {
+    condCard.replaceChildren(
+      h('span', { class: 'cond-kicker' }, 'УСЛОВИЕ ЯМЫ'),
+      h('strong', { class: 'cond-name' }, v.condition.name),
+      h('span', { class: 'cond-text' }, v.condition.text),
+    );
+    condCard.dataset.cond = v.condition.id;
+    condCard.classList.remove('show');
+    void condCard.offsetWidth;
+    condCard.classList.add('show');
+    setTimeout(() => condCard.classList.remove('show'), 2600);
+  }
+
   // ---------- Приём состояния ----------
   function showOverlay(key: string, panel: () => HTMLElement): void {
     if (overlayKey === key) return;
@@ -694,7 +732,10 @@ export function matchScreen(root: HTMLElement, session: MatchSession, nav: Match
       exchangeKey = key;
       if (v.exchangeNo === 1) sfx.roundStart();
       if (v.exchangeNo === 1 && v.roundNo === 1) showVersus(v);
-      else if (v.exchangeNo === 1) showBanner(`РАУНД ${v.roundNo}`, 'clash big', 1100);
+      else if (v.exchangeNo === 1) {
+        showBanner(`РАУНД ${v.roundNo}`, 'clash big', 1100);
+        if (v.condition.id !== 'clean') showCondition(v);
+      }
       sel = { step: null, strike: null, feint: null, feintMode: false, sealed: v.you.ready };
       lastTick = -1;
       if (v.heat >= BALANCE.heat.max) sfx.heartbeat();

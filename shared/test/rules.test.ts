@@ -242,3 +242,48 @@ describe('время вышло', () => {
     expect(timeoutChoice(c(L, R, C))).toEqual(c(L, R));
   });
 });
+
+describe('условия Ямы в правилах', () => {
+  it('Толпа ревёт: раунд начинается с Накалом', () => {
+    expect(newRound(['locked', 'locked'], BALANCE, 'crowd').heat).toBe(BALANCE.conditions.crowd.startHeat);
+  });
+
+  it('Тяжёлые кулаки: базовый урон выше с первого схода', () => {
+    const { results } = play([[c(C, L), c(L, R)]], newRound(['locked', 'locked'], BALANCE, 'heavy'));
+    expect(results[0].sides[0].breakdown?.base).toBe(BALANCE.conditions.heavy.baseDamage);
+  });
+
+  it('Мокрый пол: удар с Рывка в полную силу и продолжает Серию', () => {
+    const start = newRound(['locked', 'locked'], BALANCE, 'slick');
+    start.fighters[0].lane = L;
+    start.fighters[0].stay = 1;
+    const { results } = play([[c(R, C), c(C, L)]], start);
+    expect(results[0].sides[0].dash).toBe(true);
+    expect(results[0].sides[0].breakdown?.dash).toBe(false);
+    expect(results[0].sides[0].hitDamage).toBe(BALANCE.baseDamage);
+    expect(results[0].sides[0].streakAfter).toBe(1);
+  });
+
+  it('Гнилые плиты: ломаются от двух трещин', () => {
+    const { results } = play(
+      [
+        [c(L, C), c(C, R)],
+        [c(R, C), c(C, L)],
+      ],
+      newRound(['locked', 'locked'], BALANCE, 'rotten'),
+    );
+    expect(results[1].brokenNow).toEqual([C]);
+  });
+
+  it('Охота: Сокрушение со второго чистого чтения', () => {
+    const { results } = play(
+      [
+        [c(L, L), c(L, R)],
+        [c(C, C), c(C, R)],
+      ],
+      newRound(['locked', 'locked'], BALANCE, 'hunt'),
+    );
+    expect(results[0].sides[0].breakdown?.streak).toBe(1);
+    expect(results[1].sides[0].breakdown?.crush).toBe(true);
+  });
+});

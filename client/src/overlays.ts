@@ -29,6 +29,9 @@ export function dossierPanel(v: PlayerView, onSkip: () => void): HTMLElement {
       h('h4', null, `ПРО: ${v.opp.name}`),
       habitList(d.aboutOpp, 'Соперник пока не выдал себя. Смотри на Ленту.'),
     ),
+    v.nextCondition
+      ? h('div', { class: 'next-cond' }, h('strong', null, `РАУНД ${v.roundNo + 1}: ${v.nextCondition.name}`), h('span', null, v.nextCondition.text))
+      : null,
     h('div', { class: 'countdown-wrap' }, h('span', { class: 'countdown' })),
     skipBtn,
   );
@@ -50,6 +53,8 @@ function statBlock(title: string, s: SideStats, you: boolean): HTMLElement {
       h('dt', null, 'попал'), h('dd', null, `${s.hits}/${s.exchanges}`),
       h('dt', null, 'урон'), h('dd', null, String(s.damageDealt)),
       h('dt', null, 'серия'), h('dd', null, String(s.bestStreak)),
+      h('dt', null, 'лучший удар'),
+      h('dd', { title: s.bestHit ? `раунд ${s.bestHit.round}, сход ${s.bestHit.exchange}` : '' }, s.bestHit ? `${s.bestHit.damage}${s.bestHit.crush ? ' ⚡' : ''}` : '—'),
     ),
     h('div', { class: 'heatmap', title: 'Строки — куда уходил, столбцы — куда бил (Л/Ц/П на твоём экране)' },
       h('span', { class: 'hm-corner' }, 'уход╲удар'), ...LANES.map((l) => h('span', { class: 'hm-head' }, LANE_SHORT[l])),

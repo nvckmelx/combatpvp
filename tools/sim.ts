@@ -4,6 +4,8 @@
  */
 import { newBout, playExchange, startNextRound } from '../shared/src/bout';
 import { BotId, botChoose } from '../shared/src/bots';
+import { CONDITIONS, ConditionId, RANDOM_CONDITIONS, pickCondition } from '../shared/src/conditions';
+import { newRound } from '../shared/src/rules';
 import { createRng } from '../shared/src/rng';
 import { BoutState, Pair, Side } from '../shared/src/types';
 
@@ -20,9 +22,11 @@ interface Totals {
   suddenDeaths: number;
 }
 
-function playBout(bots: Pair<BotId>, seed: number): { bout: BoutState; totals: Omit<Totals, 'bouts' | 'winsA'> } {
+/** forced — одно условие на все раунды (для проверки условия); иначе как в игре: 1-й раунд чистый, дальше — случайные. */
+function playBout(bots: Pair<BotId>, seed: number, forced?: ConditionId): { bout: BoutState; totals: Omit<Totals, 'bouts' | 'winsA'> } {
   const rng = createRng(seed);
   let bout = newBout({ winsNeeded: 2, timerSec: 8 });
+  if (forced) bout = { ...bout, round: newRound(['locked', 'locked'], undefined, forced) };
   const t = { rounds: 1, exchanges: 0, hits: 0, trades: 0, empty: 0, damage: 0, maxExchanges: 0, suddenDeaths: 0 };
   let guard = 0;
   while (bout.winner === null && guard++ < 500) {
@@ -39,19 +43,20 @@ function playBout(bots: Pair<BotId>, seed: number): { bout: BoutState; totals: O
     if (r.suddenDeathStarted) t.suddenDeaths += 1;
     t.maxExchanges = Math.max(t.maxExchanges, r.exchange);
     if (out.roundOver && !out.boutOver) {
-      bout = startNextRound(bout);
+      const prev = bout.round.condition;
+      bout = startNextRound(bout, undefined, forced ?? pickCondition(rng, prev === 'clean' ? null : prev));
       t.rounds += 1;
     }
   }
   return { bout, totals: t };
 }
 
-function run(a: BotId, b: BotId, n: number, seed: number): void {
+function run(a: BotId, b: BotId, n: number, seed: number, forced?: ConditionId): void {
   const T: Totals = { bouts: 0, winsA: 0, rounds: 0, exchanges: 0, hits: 0, trades: 0, empty: 0, damage: 0, maxExchanges: 0, suddenDeaths: 0 };
   for (let i = 0; i < n; i++) {
     // Меняем стороны, чтобы не было преимущества стороны.
     const swap = i % 2 === 1;
-    const { bout, totals } = playBout(swap ? [b, a] : [a, b], seed + i * 7919);
+    const { bout, totals } = playBout(swap ? [b, a] : [a, b], seed + i * 7919, forced);
     T.bouts += 1;
     if (bout.winner === (swap ? 1 : 0)) T.winsA += 1;
     T.rounds += totals.rounds;
@@ -66,7 +71,7 @@ function run(a: BotId, b: BotId, n: number, seed: number): void {
   const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
   console.log(
     [
-      `${a.padEnd(9)} vs ${b.padEnd(9)}`,
+      forced ? CONDITIONS[forced].name.padEnd(15) : `${a.padEnd(9)} vs ${b.padEnd(9)}`,
       `победы ${a}: ${pct(T.winsA / T.bouts).padStart(6)}`,
       `сходов/раунд ${(T.exchanges / T.rounds).toFixed(1)}`,
       `раундов/бой ${(T.rounds / T.bouts).toFixed(2)}`,
@@ -93,3 +98,5 @@ const pairs: Pair<BotId>[] = [
 ];
 console.log(`HUJARILOVO — симуляция: ${n} боёв на пару, сид ${seed}`);
 for (const [a, b] of pairs) run(a, b, n, seed);
+console.log(`\nУсловия Ямы (reader vs random, условие на все раунды):`);
+for (const c of ['clean', ...RANDOM_CONDITIONS] as ConditionId[]) run('reader', 'random', n, seed, c);

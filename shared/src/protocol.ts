@@ -1,4 +1,5 @@
 import type { Habit, SideStats } from './dossier';
+import type { ConditionInfo } from './conditions';
 import type { FighterId } from './fighters';
 import type { BoutSettings, DamageBreakdown, FeintState, Lane } from './types';
 
@@ -95,7 +96,12 @@ export interface PlayerView {
   suddenDeath: boolean;
   you: FighterView;
   opp: FighterView;
-  ribbon: { you: MoveView[]; opp: MoveView[] | null };
+  /** null — Лента скрыта (Туман у бойца или условие «Дым»). */
+  ribbon: { you: MoveView[] | null; opp: MoveView[] | null };
+  /** Условие Ямы в этом раунде. */
+  condition: ConditionInfo;
+  /** Условие следующего раунда — известно в паузе между раундами. */
+  nextCondition: ConditionInfo | null;
   last: ExchangeView | null;
   dossier: DossierView | null;
   summary: BoutSummary | null;

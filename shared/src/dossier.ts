@@ -137,6 +137,8 @@ export interface SideStats {
   heatmap: number[][];
   stepShare: number[];
   strikeShare: number[];
+  /** Самый тяжёлый сход бойца: урон попадания и Контры вместе. */
+  bestHit: { damage: number; round: number; exchange: number; crush: boolean } | null;
 }
 
 export function sideStats(history: ExchangeResult[], subject: Side, viewer: Side): SideStats {
@@ -146,6 +148,7 @@ export function sideStats(history: ExchangeResult[], subject: Side, viewer: Side
   let hits = 0;
   let damage = 0;
   let bestStreak = 0;
+  let bestHit: SideStats['bestHit'] = null;
   for (const r of history) {
     const s = r.sides[subject];
     const step = mirror(s.choice.step, viewer);
@@ -155,6 +158,10 @@ export function sideStats(history: ExchangeResult[], subject: Side, viewer: Side
     strikes[strike] += 1;
     if (s.hit) hits += 1;
     damage += s.hitDamage + s.counterDamage;
+    const dealt = s.hitDamage + s.counterDamage;
+    if (dealt > 0 && (!bestHit || dealt > bestHit.damage)) {
+      bestHit = { damage: dealt, round: r.round, exchange: r.exchange, crush: !!s.breakdown?.crush };
+    }
     bestStreak = Math.max(bestStreak, s.streakAfter);
   }
   const total = history.length || 1;
@@ -167,5 +174,6 @@ export function sideStats(history: ExchangeResult[], subject: Side, viewer: Side
     heatmap,
     stepShare: steps.map((c) => c / total),
     strikeShare: strikes.map((c) => c / total),
+    bestHit,
   };
 }

@@ -1,4 +1,5 @@
 import { BALANCE, Balance, byCount } from './balance';
+import { ConditionId, balanceFor, startHeatFor } from './conditions';
 import {
   Choice,
   DamageBreakdown,
@@ -25,10 +26,15 @@ export function newFighter(feint: FeintState, balance: Balance = BALANCE): Fight
   };
 }
 
-export function newRound(feints: Pair<FeintState> = ['locked', 'locked'], balance: Balance = BALANCE): RoundState {
+export function newRound(
+  feints: Pair<FeintState> = ['locked', 'locked'],
+  balance: Balance = BALANCE,
+  condition: ConditionId = 'clean',
+): RoundState {
   return {
+    condition,
     fighters: [newFighter(feints[0], balance), newFighter(feints[1], balance)],
-    heat: 0,
+    heat: startHeatFor(condition, balance),
     cracks: [0, 0, 0],
     exchange: 0,
     suddenDeath: false,
@@ -71,8 +77,10 @@ export function resolveExchange(
   state: RoundState,
   rawChoices: Pair<Choice>,
   roundNo = 1,
-  balance: Balance = BALANCE,
+  baseBalance: Balance = BALANCE,
 ): { state: RoundState; result: ExchangeResult } {
+  // Условие Ямы подменяет часть баланса на весь раунд.
+  const balance = balanceFor(state.condition ?? 'clean', baseBalance);
   const exchange = state.exchange + 1;
   const before = state.fighters;
   const choices: Pair<Choice> = [normalizeChoice(before[0], rawChoices[0]), normalizeChoice(before[1], rawChoices[1])];
@@ -84,6 +92,8 @@ export function resolveExchange(
     const strikeRepeat = f.lastStrike === c.strike ? f.strikeRepeat + 1 : 1;
     return { dash: isDash(f.lane, c.step), stay, strikeRepeat };
   });
+  // Штраф Рывка (удар вполсилы, Серия не растёт) — если его не отменило условие Ямы.
+  const penalized = moved.map((m) => m.dash && balance.dashPenalty);
 
   // 2. Финт: удар в линию финта соперника проваливается.
   const caught = ([0, 1] as Side[]).map((i) => {
@@ -99,13 +109,13 @@ export function resolveExchange(
   const base = baseDamageFor(exchange, balance);
   const streakAfter = ([0, 1] as Side[]).map((i) => {
     if (!clean[i]) return 0;
-    return moved[i].dash ? before[i].streak : before[i].streak + 1;
+    return penalized[i] ? before[i].streak : before[i].streak + 1;
   });
   const breakdowns: (DamageBreakdown | null)[] = ([0, 1] as Side[]).map((i) => {
     if (!hit[i]) return null;
     const target = other(i);
     const targetLane = choices[target].step;
-    if (moved[i].dash) {
+    if (penalized[i]) {
       return { base: balance.dashDamage, streak: 0, heat: 0, dug: 0, plate: 0, predictable: 0, dash: true, crush: false, total: balance.dashDamage };
     }
     const streakCount = clean[i] ? streakAfter[i] : 0;
@@ -194,6 +204,7 @@ export function resolveExchange(
   ) as Pair<SideOutcome>;
 
   const next: RoundState = {
+    condition: state.condition ?? 'clean',
     fighters,
     heat: heatAfter,
     cracks,

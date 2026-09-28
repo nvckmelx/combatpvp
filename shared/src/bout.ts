@@ -1,4 +1,5 @@
 import { BALANCE, Balance } from './balance';
+import { ConditionId } from './conditions';
 import { newRound, resolveExchange, timeoutChoice } from './rules';
 import { BoutSettings, BoutState, Choice, ExchangeResult, FeintState, Pair, Side, other } from './types';
 
@@ -63,10 +64,10 @@ export function playExchange(bout: BoutState, choices: Pair<Choice>, balance: Ba
   return { bout: next, result, roundOver: result.roundWinner !== null, boutOver: winner !== null };
 }
 
-/** Новый раунд: проигравший прошлый раунд начинает с готовым Финтом. */
-export function startNextRound(bout: BoutState, balance: Balance = BALANCE): BoutState {
+/** Новый раунд: проигравший прошлый раунд начинает с готовым Финтом; Яма может сменить условие. */
+export function startNextRound(bout: BoutState, balance: Balance = BALANCE, condition: ConditionId = 'clean'): BoutState {
   const lastWinner = bout.roundWinners[bout.roundWinners.length - 1];
   const feints: Pair<FeintState> = ['locked', 'locked'];
   if (lastWinner !== undefined) feints[other(lastWinner)] = 'ready';
-  return { ...bout, roundNo: bout.roundNo + 1, round: newRound(feints, balance) };
+  return { ...bout, roundNo: bout.roundNo + 1, round: newRound(feints, balance, condition) };
 }

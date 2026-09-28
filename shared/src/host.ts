@@ -1,7 +1,9 @@
 import { BALANCE, Balance } from './balance';
 import { autoChoice, newBout, playExchange, startNextRound } from './bout';
 import { findHabits, sideStats } from './dossier';
+import { CONDITIONS, ConditionId, pickCondition } from './conditions';
 import { FighterId } from './fighters';
+import { Rng, createRng } from './rng';
 import type {
   ChoiceMsg,
   DossierView,
@@ -28,6 +30,8 @@ export interface HostOptions {
   names: Pair<string>;
   /** Внешность бойцов; по умолчанию — Бородач против Лысого. */
   fighters?: Pair<FighterId>;
+  /** Сид для условий Ямы; по умолчанию — время создания. */
+  seed?: number;
   scheduler: Scheduler;
   /** Вызывается после любого изменения, которое должны увидеть игроки. */
   onChange: () => void;
@@ -55,6 +59,9 @@ export class BoutHost {
   private skipVotes: Pair<boolean> = [false, false];
   private emoteUsed: Pair<boolean> = [false, false];
   private disposed = false;
+  private readonly rng: Rng;
+  /** Условие, которое Яма выбрала на следующий раунд (известно в паузе между раундами). */
+  private nextCondition: ConditionId | null = null;
   readonly names: Pair<string>;
   readonly fighters: Pair<FighterId>;
   readonly settings: BoutSettings;
@@ -67,6 +74,7 @@ export class BoutHost {
     this.onChange = opts.onChange;
     this.names = opts.names;
     this.fighters = opts.fighters ?? ['borodach', 'lysy'];
+    this.rng = createRng((opts.seed ?? opts.scheduler.now()) >>> 0);
     this.settings = opts.settings;
     this.bout = newBout(opts.settings, this.balance);
     this.startChoose(false);
@@ -119,6 +127,7 @@ export class BoutHost {
       this.bout = newBout(this.settings, this.balance);
       this.lastResult = null;
       this.lastBoutOver = false;
+      this.nextCondition = null;
       this.startChoose(true);
     } else {
       this.onChange();
@@ -162,7 +171,9 @@ export class BoutHost {
   private startChoose(notify: boolean): void {
     this.pending = [null, null];
     this.emoteUsed = [false, false];
-    this.setPhase('choose', this.settings.timerSec * 1000, () => this.resolve());
+    // Первый сход раунда — с запасом на заставку (VS / «Раунд N»), чтобы она не съедала время выбора.
+    const intro = this.bout.round.exchange === 0 ? this.balance.timing.roundIntroMs : 0;
+    this.setPhase('choose', this.settings.timerSec * 1000 + intro, () => this.resolve());
     if (notify) this.onChange();
   }
 
@@ -182,6 +193,7 @@ export class BoutHost {
         this.onChange();
       } else if (out.roundOver) {
         this.skipVotes = [false, false];
+        this.nextCondition = pickCondition(this.rng, this.bout.round.condition === 'clean' ? null : this.bout.round.condition);
         this.setPhase('dossier', this.balance.timing.dossierMs, () => this.nextRound());
         this.onChange();
       } else {
@@ -192,7 +204,8 @@ export class BoutHost {
   }
 
   private nextRound(): void {
-    this.bout = startNextRound(this.bout, this.balance);
+    this.bout = startNextRound(this.bout, this.balance, this.nextCondition ?? 'clean');
+    this.nextCondition = null;
     this.startChoose(true);
   }
 
@@ -228,6 +241,7 @@ export class BoutHost {
         gotHit: h.sides[other(i)].hit,
       }));
     const fog = r.fighters[opp].hp > 0 && r.fighters[opp].hp <= this.balance.fog.hp;
+    const smoke = r.condition === 'smoke';
     const exchangeNo = r.exchange + 1;
 
     let dossier: DossierView | null = null;
@@ -253,7 +267,9 @@ export class BoutHost {
       suddenDeath: r.suddenDeath,
       you: fighter(side),
       opp: fighter(opp),
-      ribbon: { you: ribbon(side), opp: fog ? null : ribbon(opp) },
+      ribbon: { you: smoke ? null : ribbon(side), opp: fog || smoke ? null : ribbon(opp) },
+      condition: CONDITIONS[r.condition ?? 'clean'],
+      nextCondition: this.phase === 'dossier' && this.nextCondition ? CONDITIONS[this.nextCondition] : null,
       last: this.lastResult ? this.exchangeView(this.lastResult, side) : null,
       dossier,
       summary:

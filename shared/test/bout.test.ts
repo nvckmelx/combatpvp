@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { BALANCE } from '../src/balance';
 import { autoChoice, newBout, playExchange, sanitizeSettings, startNextRound } from '../src/bout';
 import { BOTS, botChoose } from '../src/bots';
 import { findHabits, sideStats } from '../src/dossier';
@@ -171,12 +172,18 @@ describe('ведущий боя', () => {
   it('по таймеру играет сход сам, затем снова даёт выбор', () => {
     const { scheduler, advance } = fakeScheduler();
     const host = new BoutHost({ settings: { winsNeeded: 2, timerSec: 6 }, names: ['А', 'Б'], scheduler, onChange: () => {} });
+    // Первый сход раунда — с запасом на заставку.
     advance(6000);
+    expect(host.currentPhase).toBe('choose');
+    advance(BALANCE.timing.roundIntroMs);
     expect(host.currentPhase).toBe('reveal');
     expect(host.view(0).last?.you.step).toBe(C);
     advance(4000);
     expect(host.currentPhase).toBe('choose');
     expect(host.view(0).exchangeNo).toBe(2);
+    // Второй сход — без запаса.
+    advance(6000);
+    expect(host.currentPhase).toBe('reveal');
   });
 
   it('проводит бой до конца и начинает реванш по двум голосам', () => {
@@ -222,5 +229,47 @@ describe('ведущий боя', () => {
     host.state.round.fighters[1].hp = 2;
     expect(host.view(0).ribbon.opp).toBeNull();
     expect(host.view(1).ribbon.opp).not.toBeNull();
+  });
+});
+
+describe('условия Ямы', () => {
+  it('раунды после первого получают условие, оно видно в паузе и не повторяется подряд', () => {
+    const { scheduler, advance } = fakeScheduler();
+    const host = new BoutHost({ settings: { winsNeeded: 3, timerSec: 8 }, names: ['А', 'Б'], seed: 7, scheduler, onChange: () => {} });
+    expect(host.view(0).condition.id).toBe('clean');
+    const seen: string[] = [];
+    let guard = 0;
+    while (host.currentPhase !== 'over' && guard++ < 300) {
+      if (host.currentPhase === 'choose') {
+        host.submit(0, c(L, C));
+        host.submit(1, c(C, L));
+      } else if (host.currentPhase === 'dossier') {
+        const next = host.view(0).nextCondition;
+        expect(next).not.toBeNull();
+        expect(next?.id).not.toBe('clean');
+        host.skipDossier(0);
+        host.skipDossier(1);
+        expect(host.view(0).condition.id).toBe(next?.id);
+        seen.push(next!.id);
+      } else advance(5000);
+    }
+    expect(seen.length).toBeGreaterThanOrEqual(2);
+    for (let i = 1; i < seen.length; i++) expect(seen[i]).not.toBe(seen[i - 1]);
+  });
+
+  it('Дым прячет Ленты у обоих', () => {
+    const { scheduler } = fakeScheduler();
+    const host = new BoutHost({ settings: { winsNeeded: 2, timerSec: 8 }, names: ['А', 'Б'], scheduler, onChange: () => {} });
+    host.state.round.condition = 'smoke';
+    expect(host.view(0).ribbon).toEqual({ you: null, opp: null });
+  });
+
+  it('лучший удар попадает в статистику', () => {
+    let b = newBout({ winsNeeded: 2, timerSec: 8 });
+    b = playExchange(b, [c(L, R), c(R, L)]).bout; // размен по 2
+    b = playExchange(b, [c(C, C), c(L, L)]).bout; // оба мимо
+    b = playExchange(b, [c(C, R), c(R, C)]).bout; // размен: у бойца 0 Накал +1 → 3
+    const s = sideStats(b.history, 0, 0);
+    expect(s.bestHit).toEqual({ damage: 3, round: 1, exchange: 3, crush: false });
   });
 });

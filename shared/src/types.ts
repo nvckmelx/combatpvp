@@ -1,3 +1,5 @@
+import type { ConditionId } from './conditions';
+
 /**
  * Линия пола Ямы. В логике — абсолютная разметка с точки зрения бойца 0:
  * 0 — левая, 1 — центр, 2 — правая. Боец 1 видит её зеркально (см. mirror).
@@ -41,6 +43,8 @@ export interface RoundState {
   /** Сколько сходов уже сыграно в раунде. */
   exchange: number;
   suddenDeath: boolean;
+  /** Условие Ямы на этот раунд. */
+  condition: ConditionId;
 }
 
 /** Как сложился урон одного попадания. */

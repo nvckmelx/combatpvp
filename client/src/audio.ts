@@ -16,6 +16,16 @@ class Sfx {
     }
   }
 
+  /** Создаёт и будит AudioContext прямо в обработчике нажатия — иначе iOS не даст звуку играть. */
+  warm(): void {
+    try {
+      this.ctx ??= new AudioContext();
+      if (this.ctx.state === 'suspended') void this.ctx.resume();
+    } catch {
+      /* без WebAudio — просто без звуков */
+    }
+  }
+
   toggle(): boolean {
     this.muted = !this.muted;
     store.muted = this.muted;
@@ -205,6 +215,7 @@ class Music {
   /** Вызывается прямо из обработчика нажатия (например, «Нажми, чтобы начать»). */
   unlock(): void {
     this.unlocked = true;
+    sfx.warm();
     if (this.ctx?.state === 'suspended') void this.ctx.resume();
     this.sync();
   }
