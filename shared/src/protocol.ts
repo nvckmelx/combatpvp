@@ -109,6 +109,27 @@ export interface ChoiceMsg {
 
 export const EMOTES = ['Знал.', 'Хм.', 'Ещё раз?', '…'] as const;
 
+export const NAME_MAX = 18;
+
+/** Прозвище: без управляющих символов и лишних пробелов, не длиннее NAME_MAX. */
+export function cleanName(raw: unknown, fallback = 'Боец'): string {
+  if (typeof raw !== 'string') return fallback;
+  const name = raw.replace(/[\u0000-\u001f\u007f<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, NAME_MAX);
+  return name || fallback;
+}
+
+/** Код комнаты: 4 символа без похожих друг на друга букв и цифр. */
+export const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+export const CODE_LENGTH = 4;
+
+export function cleanCode(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const code = raw.trim().toUpperCase();
+  if (code.length !== CODE_LENGTH) return null;
+  for (const ch of code) if (!CODE_ALPHABET.includes(ch)) return null;
+  return code;
+}
+
 /** Сообщения клиента серверу. */
 export type ClientMsg =
   | { t: 'create'; name: string; settings: Partial<BoutSettings> }
@@ -116,6 +137,7 @@ export type ClientMsg =
   | { t: 'join'; code: string; name: string; token?: string }
   | { t: 'choose'; choice: ChoiceMsg }
   | { t: 'rematch' }
+  | { t: 'skip' }
   | { t: 'emote'; id: number }
   | { t: 'leave' };
 
