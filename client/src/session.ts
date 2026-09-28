@@ -4,6 +4,7 @@ import {
   BoutHost,
   BoutSettings,
   ChoiceMsg,
+  FighterId,
   PlayerView,
   Scheduler,
   Side,
@@ -11,6 +12,7 @@ import {
   botChoose,
   createRng,
   mirror,
+  otherFighter,
 } from '@hj/shared';
 import { net } from './net';
 
@@ -99,6 +101,7 @@ export class LocalSession implements MatchSession {
 
   constructor(
     playerName: string,
+    playerFighter: FighterId,
     private readonly bot: BotId,
     settings: BoutSettings,
   ) {
@@ -106,6 +109,7 @@ export class LocalSession implements MatchSession {
     this.host = new BoutHost({
       settings,
       names: [playerName, botName],
+      fighters: [playerFighter, otherFighter(playerFighter)],
       scheduler: browserScheduler,
       onChange: () => this.changed(),
     });

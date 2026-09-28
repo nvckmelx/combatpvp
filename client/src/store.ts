@@ -36,6 +36,12 @@ export const store = {
   set name(value: string) {
     write('hj.name', value);
   },
+  get fighter(): string {
+    return read('hj.fighter', 'borodach');
+  },
+  set fighter(value: string) {
+    write('hj.fighter', value);
+  },
   get muted(): boolean {
     return read('hj.muted', false);
   },

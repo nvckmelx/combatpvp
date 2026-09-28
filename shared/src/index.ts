@@ -1,5 +1,6 @@
 export * from './types';
 export * from './balance';
+export * from './fighters';
 export * from './rules';
 export * from './bout';
 export * from './dossier';

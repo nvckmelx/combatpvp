@@ -45,8 +45,15 @@ function serveStatic(req: IncomingMessage, res: ServerResponse): void {
     res.end();
     return;
   }
-  // Любой неизвестный путь — это экран игры (ссылки-приглашения /?r=КОД и т.п.).
-  if (!existsSync(file) || statSync(file).isDirectory()) file = join(CLIENT_DIR, 'index.html');
+  const missing = !existsSync(file) || statSync(file).isDirectory();
+  // Нет такого файла (например, арта ещё не нарисовали) — честный 404, чтобы клиент показал заглушку.
+  if (missing && extname(url.pathname)) {
+    res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-cache' });
+    res.end('Не найдено');
+    return;
+  }
+  // Любой другой путь — это экран игры (ссылки-приглашения /?r=КОД и т.п.).
+  if (missing) file = join(CLIENT_DIR, 'index.html');
   const type = MIME[extname(file)] ?? 'application/octet-stream';
   const immutable = file.includes(`${sep}assets${sep}`);
   res.writeHead(200, {

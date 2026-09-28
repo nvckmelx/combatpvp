@@ -9,8 +9,10 @@ import {
   EMOTES,
   Scheduler,
   ServerMsg,
+  FighterId,
   Side,
   cleanCode,
+  cleanFighter,
   cleanName,
   other,
   sanitizeSettings,
@@ -31,6 +33,7 @@ const MAX_ROOMS = 2000;
 interface Seat {
   token: string;
   name: string;
+  fighter: FighterId;
   ws: WebSocket | null;
 }
 
@@ -72,6 +75,7 @@ export class Room {
     this.host = new BoutHost({
       settings: this.settings,
       names: [this.seats[0].name, guest.name],
+      fighters: [this.seats[0].fighter, guest.fighter],
       scheduler,
       onChange: () => this.broadcast(),
     });
@@ -119,11 +123,11 @@ export class Rooms {
   handle(ws: WebSocket, ctx: ConnCtx, msg: ClientMsg): void {
     switch (msg.t) {
       case 'create':
-        return this.create(ws, ctx, msg.name, msg.settings);
+        return this.create(ws, ctx, msg.name, msg.fighter, msg.settings);
       case 'peek':
         return this.peek(ws, msg.code);
       case 'join':
-        return this.join(ws, ctx, msg.code, msg.name, msg.token);
+        return this.join(ws, ctx, msg.code, msg.name, msg.fighter, msg.token);
       case 'leave':
         return this.detach(ctx, true);
       default:
@@ -131,11 +135,11 @@ export class Rooms {
     }
   }
 
-  private create(ws: WebSocket, ctx: ConnCtx, rawName: string, rawSettings: Partial<BoutSettings> | undefined): void {
+  private create(ws: WebSocket, ctx: ConnCtx, rawName: string, rawFighter: unknown, rawSettings: Partial<BoutSettings> | undefined): void {
     this.detach(ctx, true);
     if (this.rooms.size >= MAX_ROOMS) return send(ws, { t: 'error', message: 'Сервер переполнен, попробуй позже' });
     const code = this.newCode();
-    const room = new Room(code, sanitizeSettings(rawSettings), { token: randomUUID(), name: cleanName(rawName), ws });
+    const room = new Room(code, sanitizeSettings(rawSettings), { token: randomUUID(), name: cleanName(rawName), fighter: cleanFighter(rawFighter), ws });
     this.rooms.set(code, room);
     ctx.room = room;
     ctx.side = 0;
@@ -148,7 +152,7 @@ export class Rooms {
     send(ws, { t: 'peek', code: code ?? '', host: room ? room.seats[0].name : null, open: !!room && !room.seats[1] });
   }
 
-  private join(ws: WebSocket, ctx: ConnCtx, rawCode: string, rawName: string, token: string | undefined): void {
+  private join(ws: WebSocket, ctx: ConnCtx, rawCode: string, rawName: string, rawFighter: unknown, token: string | undefined): void {
     const code = cleanCode(rawCode);
     const room = code ? this.rooms.get(code) : undefined;
     if (!room) return send(ws, { t: 'error', message: 'Бой с таким кодом не найден' });
@@ -171,7 +175,7 @@ export class Rooms {
 
     if (room.seats[1]) return send(ws, { t: 'error', message: 'В этом бою уже двое' });
     this.detach(ctx, true);
-    const seat: Seat = { token: randomUUID(), name: cleanName(rawName), ws };
+    const seat: Seat = { token: randomUUID(), name: cleanName(rawName), fighter: cleanFighter(rawFighter), ws };
     if (seat.name === room.seats[0].name) seat.name = `${seat.name.slice(0, 16)} 2`;
     room.seats[1] = seat;
     ctx.room = room;

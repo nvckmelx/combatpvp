@@ -1,4 +1,5 @@
 import type { Habit, SideStats } from './dossier';
+import type { FighterId } from './fighters';
 import type { BoutSettings, DamageBreakdown, FeintState, Lane } from './types';
 
 /**
@@ -11,6 +12,7 @@ export type Phase = 'choose' | 'reveal' | 'dossier' | 'over';
 
 export interface FighterView {
   name: string;
+  fighter: FighterId;
   hp: number;
   maxHp: number;
   lane: Lane;
@@ -132,9 +134,9 @@ export function cleanCode(raw: unknown): string | null {
 
 /** Сообщения клиента серверу. */
 export type ClientMsg =
-  | { t: 'create'; name: string; settings: Partial<BoutSettings> }
+  | { t: 'create'; name: string; fighter?: string; settings: Partial<BoutSettings> }
   | { t: 'peek'; code: string }
-  | { t: 'join'; code: string; name: string; token?: string }
+  | { t: 'join'; code: string; name: string; fighter?: string; token?: string }
   | { t: 'choose'; choice: ChoiceMsg }
   | { t: 'rematch' }
   | { t: 'skip' }

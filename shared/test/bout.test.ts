@@ -207,6 +207,15 @@ describe('ведущий боя', () => {
     expect(host.view(0).boutId).toBe(2);
   });
 
+  it('отдаёт внешность бойцов в виде каждого игрока', () => {
+    const { scheduler } = fakeScheduler();
+    const host = new BoutHost({ settings: { winsNeeded: 2, timerSec: 8 }, names: ['А', 'Б'], fighters: ['lysy', 'lysy'], scheduler, onChange: () => {} });
+    expect(host.view(0).you.fighter).toBe('lysy');
+    expect(host.view(1).opp.fighter).toBe('lysy');
+    const byDefault = new BoutHost({ settings: { winsNeeded: 2, timerSec: 8 }, names: ['А', 'Б'], scheduler, onChange: () => {} });
+    expect(byDefault.view(1).you.fighter).toBe('lysy');
+  });
+
   it('прячет Ленту соперника в Тумане', () => {
     const { scheduler } = fakeScheduler();
     const host = new BoutHost({ settings: { winsNeeded: 2, timerSec: 8 }, names: ['А', 'Б'], scheduler, onChange: () => {} });

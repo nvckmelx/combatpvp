@@ -1,32 +1,33 @@
-import {
-  BALANCE,
-  DamageBreakdown,
-  EMOTES,
-  ExchangeView,
-  Habit,
-  LANES,
-  Lane,
-  MoveView,
-  PlayerView,
-  SideStats,
-  Who,
-  byCount,
-} from '@hj/shared';
+import { BALANCE, DamageBreakdown, EMOTES, ExchangeView, LANES, Lane, MoveView, PlayerView, Who, byCount } from '@hj/shared';
+import { art, preloadFighter, probe } from './assets';
 import { sfx } from './audio';
-import { fighterSvg } from './fighter';
+import { LANE_SHORT, dossierPanel, resultPanel } from './overlays';
 import type { MatchSession } from './session';
+import { FighterSprite, portrait } from './sprites';
 import { store } from './store';
-import { h, icon, reducedMotion, toast, wait } from './ui';
+import { h, icon, reducedMotion, svg, toast, wait } from './ui';
 
 export interface MatchNav {
   menu(): void;
 }
 
-const LANE_SHORT = ['Л', 'Ц', 'П'];
-/** Координаты для слоя трасс ударов (viewBox 300×600). */
-const TRAIL_Y = { you: 470, opp: 130 };
-const laneX = (lane: Lane) => 50 + lane * 100;
-const lanePct = (lane: Lane) => `${(lane + 0.5) * (100 / 3)}%`;
+/** Где стоит боец на своей линии, в % ширины сцены: соперник дальше, ты ближе к камере. */
+const OPP_X = [24, 50, 76];
+const YOU_X = [21, 50, 79];
+/** Высота головы бойцов в % высоты сцены — туда прилетают удары. */
+const OPP_HEAD_Y = 30;
+const YOU_HEAD_Y = 50;
+
+const LANE_WORD = ['ВЛЕВО', 'ЦЕНТР', 'ВПРАВО'];
+
+const PAD_ICONS = {
+  stepL: '<svg viewBox="0 0 24 24"><path d="M20 12H5M11 6l-6 6 6 6"/></svg>',
+  stepC: '<svg viewBox="0 0 24 24"><rect x="3.5" y="7" width="7.5" height="9" rx="2.5"/><rect x="13" y="7" width="7.5" height="9" rx="2.5"/></svg>',
+  stepR: '<svg viewBox="0 0 24 24"><path d="M4 12h15M13 6l6 6-6 6"/></svg>',
+  hitL: '<svg viewBox="0 0 24 24"><path d="M19 21c0-8-4-12-12-12"/><path d="M11 5 7 9l4 4"/></svg>',
+  hitC: '<svg viewBox="0 0 24 24"><path d="M12 21V5M6 11l6-6 6 6"/></svg>',
+  hitR: '<svg viewBox="0 0 24 24"><path d="M5 21c0-8 4-12 12-12"/><path d="M13 5l4 4-4 4"/></svg>',
+};
 
 interface Selection {
   step: Lane | null;
@@ -49,116 +50,158 @@ export function matchScreen(root: HTMLElement, session: MatchSession, nav: Match
   let overlayKey = '';
   let recordedBout = 0;
   let disposed = false;
+  let fightersKey = '';
 
-  // ---------- Разметка ----------
+  // ---------- HUD сверху ----------
   const soundBtn = h('button', { class: 'icon-btn', 'aria-label': 'Звук', onclick: () => {
     sfx.toggle();
     soundBtn.replaceChildren(icon(sfx.muted ? 'mute' : 'sound'));
   } }, icon(sfx.muted ? 'mute' : 'sound'));
   const leaveBtn = h('button', { class: 'icon-btn', 'aria-label': 'Выйти из боя', onclick: () => {
-    const over = view?.phase === 'over';
-    if (over || confirm('Выйти из боя? Соперник останется один.')) {
+    if (view?.phase === 'over' || confirm('Выйти из боя? Соперник останется один.')) {
       session.leave();
       nav.menu();
     }
   } }, icon('close'));
+  const roundInfo = h('div', { class: 'round-info' });
 
-  const hud = (who: Who) => {
+  const card = (who: Who) => {
+    const face = h('div', { class: 'fcard-face' });
     const name = h('span', { class: 'name' });
     const ready = h('span', { class: 'chip chip-ready' }, 'ГОТОВ');
     const offline = h('span', { class: 'chip chip-off' }, 'НЕ В СЕТИ');
-    const feint = h('span', { class: 'chip chip-feint' }, 'ФИНТ ГОТОВ');
-    const wins = h('div', { class: 'wins', 'aria-label': 'Выигранные раунды' });
-    const segs = h('div', { class: 'hp-segs' });
+    const feint = h('span', { class: 'chip chip-feint' }, 'ФИНТ');
+    const fill = h('span', { class: 'hpbar-fill' });
+    const ghost = h('span', { class: 'hpbar-ghost' });
     const hpNum = h('span', { class: 'hp-num' });
+    const wins = h('div', { class: 'wins', 'aria-label': 'Выигранные раунды' });
     const streak = h('div', { class: 'streak' });
     const ribbon = h('div', { class: 'ribbon', 'aria-label': 'Последние сходы' });
-    const root = h(
-      'header',
-      { class: `hud hud-${who}` },
-      h('div', { class: 'hud-top' }, h('div', { class: 'hud-name' }, name, ready, offline), wins),
-      h('div', { class: 'hp' }, segs, hpNum),
-      h('div', { class: 'hud-sub' }, streak, feint, ribbon),
+    const el = h(
+      'div',
+      { class: `fcard fcard-${who}` },
+      face,
+      h('div', { class: 'fcard-body' },
+        h('div', { class: 'fcard-name' }, name, ready, offline, feint),
+        h('div', { class: 'hpbar' }, ghost, fill, hpNum),
+        h('div', { class: 'fcard-sub' }, wins, streak),
+        ribbon,
+      ),
     );
-    return { root, name, ready, offline, feint, wins, segs, hpNum, streak, ribbon };
+    return { el, face, name, ready, offline, feint, fill, ghost, hpNum, wins, streak, ribbon };
   };
-  const oppHud = hud('opp');
-  const youHud = hud('you');
-  oppHud.root.prepend(h('div', { class: 'hud-bar' }, leaveBtn, h('div', { class: 'round-info' }), soundBtn));
-  const roundInfo = oppHud.root.querySelector('.round-info') as HTMLElement;
-
-  const plates = LANES.map((l) => h('div', { class: 'plate', 'data-lane': l }, h('div', { class: 'crack' })));
-  const lanesEl = h('div', { class: 'lanes' }, ...plates);
-
-  const targetTags = LANES.map(() => h('span', { class: 'tag' }));
-  const targets = LANES.map((l) =>
-    h('button', { class: 'target', 'data-lane': l, 'aria-label': `Ударить: ${['левая', 'центр', 'правая'][l]} линия`, onclick: () => pickStrike(l) }, h('span', { class: 'reticle' }), targetTags[l]),
-  );
-  const spotTags = LANES.map(() => h('span', { class: 'tag' }));
-  const spots = LANES.map((l) =>
-    h('button', { class: 'spot', 'data-lane': l, 'aria-label': `Уйти: ${['левая', 'центр', 'правая'][l]} линия`, onclick: () => pickStep(l) }, spotTags[l]),
-  );
-
-  const figOpp = h('div', { class: 'fig opp' }, fighterSvg());
-  const figYou = h('div', { class: 'fig you' }, fighterSvg());
-  const ghost = h('div', { class: 'fig you ghost' }, fighterSvg(), h('span', { class: 'ghost-label' }));
-  const feintGhost = h('div', { class: 'fig you feint-ghost' }, fighterSvg(), h('span', { class: 'ghost-label' }, 'ФИНТ'));
-  const oppFeintGhost = h('div', { class: 'fig opp feint-ghost' }, fighterSvg(), h('span', { class: 'ghost-label' }, 'ФИНТ'));
-  const bubbleOpp = h('div', { class: 'bubble bubble-opp' });
-  const bubbleYou = h('div', { class: 'bubble bubble-you' });
-
+  const youCard = card('you');
+  const oppCard = card('opp');
+  const clock = h('div', { class: 'clock' });
   const heatPips = [0, 1, 2].map(() => h('span', { class: 'heat-pip' }));
-  const heatEl = h('div', { class: 'heat', 'aria-label': 'Накал' }, h('span', { class: 'heat-label' }, 'НАКАЛ'), ...heatPips, h('span', { class: 'heat-num' }));
-  const midInfo = h('div', { class: 'mid-info' });
+  const heatEl = h('div', { class: 'heat', 'aria-label': 'Накал' }, h('span', { class: 'heat-label' }, 'НАКАЛ'), h('div', { class: 'heat-pips' }, ...heatPips));
+  const hud = h(
+    'header',
+    { class: 'fhud' },
+    h('div', { class: 'fhud-bar' }, leaveBtn, roundInfo, soundBtn),
+    h('div', { class: 'fhud-row' }, youCard.el, h('div', { class: 'fhud-mid' }, clock, heatEl), oppCard.el),
+  );
 
+  // ---------- Сцена ----------
+  const oppSprite = new FighterSprite('lysy', 'front');
+  const youSprite = new FighterSprite('borodach', 'back');
+  const ghostSprite = new FighterSprite('borodach', 'back');
+  const feintSprite = new FighterSprite('borodach', 'back');
+  const oppFeintSprite = new FighterSprite('lysy', 'front');
+  const actorOpp = h('div', { class: 'actor opp' }, oppSprite.el);
+  const actorOppFeint = h('div', { class: 'actor opp feint-ghost' }, oppFeintSprite.el, h('span', { class: 'ghost-label' }, 'ФИНТ'));
+  const actorYou = h('div', { class: 'actor you' }, youSprite.el);
+  const actorGhost = h('div', { class: 'actor you ghost' }, ghostSprite.el, h('span', { class: 'ghost-label' }));
+  const actorFeint = h('div', { class: 'actor you feint-ghost' }, feintSprite.el, h('span', { class: 'ghost-label' }, 'ФИНТ'));
+  const reticle = h('div', { class: 'reticle' });
+  const plates = LANES.map((l) => h('div', { class: 'plate', 'data-lane': l }, h('div', { class: 'crack' })));
+  const floor = h('div', { class: 'floor' }, h('div', { class: 'floor-plane' }, ...plates));
   const trails = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  trails.setAttribute('viewBox', '0 0 300 600');
+  trails.setAttribute('viewBox', '0 0 100 100');
   trails.setAttribute('preserveAspectRatio', 'none');
   trails.classList.add('trails');
   const fx = h('div', { class: 'fx' });
-  const banner = h('div', { class: 'banner' });
-
-  const arena = h(
-    'main',
-    { class: 'arena' },
-    lanesEl,
-    h('div', { class: 'zone zone-opp' }, ...targets, oppFeintGhost, figOpp, bubbleOpp),
-    h('div', { class: 'mid' }, heatEl, midInfo),
-    h('div', { class: 'zone zone-you' }, ...spots, feintGhost, ghost, figYou, bubbleYou),
+  const bubbleOpp = h('div', { class: 'bubble bubble-opp' });
+  const bubbleYou = h('div', { class: 'bubble bubble-you' });
+  const sceneBg = h('div', { class: 'scene-bg' });
+  const stage = h(
+    'div',
+    { class: 'stage' },
+    sceneBg,
+    h('div', { class: 'crowd' }),
+    floor,
+    actorOppFeint,
+    actorOpp,
+    reticle,
+    actorFeint,
+    actorGhost,
+    actorYou,
     trails,
     fx,
-    banner,
+    bubbleOpp,
+    bubbleYou,
   );
+  const banner = h('div', { class: 'banner' });
+  const midInfo = h('div', { class: 'mid-info' });
+  const scene = h('main', { class: 'scene' }, stage, h('div', { class: 'letterbox top' }), h('div', { class: 'letterbox bottom' }), midInfo, banner);
+
+  const landscape = window.matchMedia('(min-aspect-ratio: 1/1)').matches;
+  const pitUrl = art.arena(landscape ? 'landscape' : 'portrait');
+  void probe(pitUrl).then((ok) => ok && (sceneBg.style.backgroundImage = `url(${pitUrl})`));
+  [1, 2, 3].forEach((n) => void probe(art.crack(n)).then((ok) => ok && floor.classList.add(`art-crack-${n}`)));
+
+  // ---------- Панель выбора ----------
+  const padButton = (kind: 'step' | 'strike', lane: Lane) => {
+    const key = `${kind === 'step' ? 'step' : 'hit'}${'LCR'[lane]}` as keyof typeof PAD_ICONS;
+    const sub = h('span', { class: 'pad-sub' });
+    const tag = h('span', { class: 'pad-tag' });
+    const btn = h(
+      'button',
+      {
+        class: `pad-btn pad-${kind}`,
+        'data-lane': lane,
+        'aria-label': `${kind === 'step' ? 'Уйти' : 'Ударить'}: ${LANE_WORD[lane].toLowerCase()}`,
+        onclick: () => (kind === 'step' ? pickStep(lane) : pickStrike(lane)),
+      },
+      svg(PAD_ICONS[key], 'pad-icon'),
+      h('span', { class: 'pad-name' }, LANE_WORD[lane]),
+      sub,
+      tag,
+    );
+    return { btn, sub, tag };
+  };
+  const stepBtns = LANES.map((l) => padButton('step', l));
+  const strikeBtns = LANES.map((l) => padButton('strike', l));
 
   const timerBar = h('span', { class: 'timer-bar' });
   const readyLabel = h('span', { class: 'ready-label' }, 'ГОТОВ');
-  const timerNum = h('span', { class: 'timer-num' });
-  const readyBtn = h('button', { class: 'btn btn-primary btn-ready', onclick: () => seal() }, timerBar, readyLabel, timerNum);
+  const readyBtn = h('button', { class: 'btn btn-primary btn-ready', onclick: () => seal() }, timerBar, readyLabel);
   const feintBtn = h('button', { class: 'btn btn-feint', onclick: () => toggleFeint() }, 'ФИНТ');
   const hint = h('div', { class: 'hint' });
-  const emotes = h(
-    'div',
-    { class: 'emotes' },
-    ...EMOTES.map((text, id) => h('button', { class: 'emote', onclick: () => session.emote(id) }, text)),
+  const emotes = h('div', { class: 'emotes' }, ...EMOTES.map((text, id) => h('button', { class: 'emote', onclick: () => session.emote(id) }, text)));
+  const pad = h(
+    'footer',
+    { class: 'pad' },
+    hint,
+    h('div', { class: 'pad-row' }, h('span', { class: 'pad-label' }, 'УХОД'), ...stepBtns.map((b) => b.btn)),
+    h('div', { class: 'pad-row' }, h('span', { class: 'pad-label' }, 'УДАР'), ...strikeBtns.map((b) => b.btn)),
+    h('div', { class: 'pad-actions' }, feintBtn, readyBtn),
+    emotes,
   );
-  const controls = h('div', { class: 'controls' }, feintBtn, readyBtn);
-  youHud.root.append(hint, controls, emotes);
 
   const netBanner = h('div', { class: 'net-banner' }, 'Связь потеряна. Переподключаемся…');
   const overlay = h('div', { class: 'overlay' });
-  const screen = h('div', { class: 'screen match' }, oppHud.root, arena, youHud.root, overlay, netBanner);
+  const screen = h('div', { class: 'screen match' }, hud, scene, pad, overlay, netBanner);
   root.append(screen);
 
   // ---------- Выбор ----------
-  function canChoose(): boolean {
-    return !!view && view.phase === 'choose' && !sel.sealed && !animating;
-  }
+  const canChoose = () => !!view && view.phase === 'choose' && !sel.sealed && !animating;
 
   function pickStep(lane: Lane): void {
     if (!canChoose()) return;
     if (sel.feintMode) {
       if (lane === sel.step) {
-        toast('Финт показывают в другую линию, не туда, где стоишь');
+        toast('Финт показывают в другую линию, не туда, куда уходишь');
         return;
       }
       sel.feint = lane;
@@ -183,9 +226,7 @@ export function matchScreen(root: HTMLElement, session: MatchSession, nav: Match
     if (sel.feint !== null) {
       sel.feint = null;
       sel.feintMode = false;
-    } else {
-      sel.feintMode = !sel.feintMode;
-    }
+    } else sel.feintMode = !sel.feintMode;
     renderChoice();
   }
 
@@ -224,57 +265,22 @@ export function matchScreen(root: HTMLElement, session: MatchSession, nav: Match
   window.addEventListener('keydown', onKey);
 
   // ---------- Отрисовка ----------
-  function setFig(fig: HTMLElement, lane: Lane): void {
-    fig.style.left = lanePct(lane);
-  }
+  const place = (actor: HTMLElement, x: number) => (actor.style.left = `${x}%`);
 
-  function renderHud(v: PlayerView): void {
-    for (const who of ['you', 'opp'] as Who[]) {
-      const f = v[who];
-      const el = who === 'you' ? youHud : oppHud;
-      el.name.textContent = who === 'you' ? `${f.name} (ты)` : f.name;
-      el.ready.hidden = !(who === 'opp' && v.phase === 'choose' && f.ready);
-      el.offline.hidden = f.connected;
-      el.feint.hidden = !(who === 'opp' && f.feint === 'ready');
-      el.wins.replaceChildren(
-        ...Array.from({ length: v.settings.winsNeeded }, (_, i) => h('span', { class: `win-pip${i < v.wins[who] ? ' on' : ''}` })),
-      );
-      const prevHp = Number(el.segs.dataset.hp ?? f.hp);
-      el.segs.replaceChildren(
-        ...Array.from({ length: f.maxHp }, (_, i) =>
-          h('span', { class: `seg${i < f.hp ? ' on' : ''}${i >= f.hp && i < prevHp ? ' lost' : ''}${f.hp <= 3 && i < f.hp ? ' low' : ''}` }),
-        ),
-      );
-      el.segs.dataset.hp = String(f.hp);
-      el.hpNum.textContent = String(f.hp);
-      el.streak.replaceChildren(
-        ...(f.streak > 0
-          ? [h('span', { class: 'streak-label' }, 'СЕРИЯ'), ...Array.from({ length: Math.min(f.streak, 5) }, () => h('span', { class: 'notch' }))]
-          : []),
-      );
-      const moves = v.ribbon[who];
-      el.ribbon.replaceChildren(
-        ...(moves === null
-          ? [h('span', { class: 'fog' }, 'ТУМАН')]
-          : moves.map((m) => ribbonCell(m))),
-      );
-    }
-    roundInfo.textContent = `РАУНД ${v.roundNo} · СХОД ${v.phase === 'choose' ? v.exchangeNo : Math.max(1, v.exchangeNo - 1)}`;
-    const labels: string[] = [];
-    if (v.suddenDeath) labels.push('ПОСЛЕДНИЙ СХОД');
-    if (v.fatigue && v.phase === 'choose') labels.push('УСТАЛОСТЬ: УРОН ВЫШЕ');
-    if (!session.online) labels.push('СПАРРИНГ');
-    midInfo.textContent = labels.join(' · ');
-    renderHeat(v.heat);
-    plates.forEach((p, l) => {
-      p.dataset.cracks = String(Math.min(v.cracks[l], BALANCE.plates.cracksToBreak));
-    });
-  }
-
-  function renderHeat(heat: number): void {
-    heatPips.forEach((p, i) => p.classList.toggle('on', i < heat));
-    heatEl.dataset.heat = String(heat);
-    (heatEl.querySelector('.heat-num') as HTMLElement).textContent = heat > 0 ? `+${heat}` : '';
+  function setFighters(v: PlayerView): void {
+    const key = `${v.you.fighter}:${v.opp.fighter}`;
+    if (key === fightersKey) return;
+    fightersKey = key;
+    youSprite.setFighter(v.you.fighter);
+    ghostSprite.setFighter(v.you.fighter);
+    feintSprite.setFighter(v.you.fighter);
+    oppSprite.setFighter(v.opp.fighter);
+    oppFeintSprite.setFighter(v.opp.fighter);
+    youCard.face.replaceChildren(portrait(v.you.fighter));
+    oppCard.face.replaceChildren(portrait(v.opp.fighter));
+    screen.classList.toggle('mirror-match', v.you.fighter === v.opp.fighter);
+    void preloadFighter(v.you.fighter);
+    void preloadFighter(v.opp.fighter);
   }
 
   function ribbonCell(m: MoveView): HTMLElement {
@@ -288,7 +294,44 @@ export function matchScreen(root: HTMLElement, session: MatchSession, nav: Match
     );
   }
 
-  /** Сколько урона получит тот, кто окажется на линии lane (без Серии — она зависит от исхода). */
+  function renderHud(v: PlayerView): void {
+    setFighters(v);
+    for (const who of ['you', 'opp'] as Who[]) {
+      const f = v[who];
+      const c = who === 'you' ? youCard : oppCard;
+      c.name.textContent = f.name;
+      c.ready.hidden = !(who === 'opp' && v.phase === 'choose' && f.ready);
+      c.offline.hidden = f.connected;
+      c.feint.hidden = f.feint !== 'ready';
+      const pct = `${(Math.max(0, f.hp) / f.maxHp) * 100}%`;
+      c.fill.style.width = pct;
+      c.ghost.style.width = pct;
+      c.hpNum.textContent = String(f.hp);
+      c.el.classList.toggle('low', f.hp > 0 && f.hp <= 3);
+      c.wins.replaceChildren(...Array.from({ length: v.settings.winsNeeded }, (_, i) => h('span', { class: `win-pip${i < v.wins[who] ? ' on' : ''}` })));
+      c.streak.replaceChildren(
+        ...(f.streak > 0 ? [h('span', { class: 'streak-label' }, 'СЕРИЯ'), ...Array.from({ length: Math.min(f.streak, 5) }, () => h('span', { class: 'notch' }))] : []),
+      );
+      const moves = v.ribbon[who];
+      c.ribbon.replaceChildren(...(moves === null ? [h('span', { class: 'fog' }, 'ТУМАН')] : moves.map(ribbonCell)));
+    }
+    roundInfo.textContent = `РАУНД ${v.roundNo} · СХОД ${v.phase === 'choose' ? v.exchangeNo : Math.max(1, v.exchangeNo - 1)}`;
+    const labels: string[] = [];
+    if (v.suddenDeath) labels.push('ПОСЛЕДНИЙ СХОД');
+    if (v.fatigue && v.phase === 'choose') labels.push('УСТАЛОСТЬ: УРОН ВЫШЕ');
+    if (!session.online) labels.push('СПАРРИНГ');
+    midInfo.textContent = labels.join(' · ');
+    renderHeat(v.heat);
+    plates.forEach((p, l) => (p.dataset.cracks = String(Math.min(v.cracks[l], BALANCE.plates.cracksToBreak))));
+  }
+
+  function renderHeat(heat: number): void {
+    heatPips.forEach((p, i) => p.classList.toggle('on', i < heat));
+    heatEl.dataset.heat = String(heat);
+    scene.dataset.heat = String(heat);
+  }
+
+  /** Урон по тому, кто окажется на линии lane (без Серии — она зависит от исхода). */
   function expectedDamage(v: PlayerView, lane: Lane, target: Who): number {
     const t = v[target];
     const base = v.fatigue ? BALANCE.fatigue.baseDamage : BALANCE.baseDamage;
@@ -306,43 +349,52 @@ export function matchScreen(root: HTMLElement, session: MatchSession, nav: Match
     screen.classList.toggle('sealed', choosing && sel.sealed);
     screen.classList.toggle('feint-mode', sel.feintMode);
 
-    targets.forEach((t, l) => {
-      t.classList.toggle('selected', sel.strike === l);
-      t.disabled = !choosing || sel.sealed;
-      const dmg = expectedDamage(v, l as Lane, 'opp');
-      const predictable = v.you.lastStrike === l && v.you.strikeRepeat + 1 >= BALANCE.predictable.from;
-      targetTags[l].textContent = choosing ? `${Math.max(1, dmg - (predictable ? BALANCE.predictable.penalty : 0))}` : '';
-      targetTags[l].title = 'Урон, если попадёшь сюда (без Серии)';
-      targetTags[l].classList.toggle('hot', dmg >= 4);
+    stepBtns.forEach(({ btn, sub, tag }, l) => {
+      const lane = l as Lane;
+      const dash = Math.abs(lane - v.you.lane) === 2;
+      const risk = expectedDamage(v, lane, 'you');
+      btn.classList.toggle('selected', sel.step === lane);
+      btn.classList.toggle('feint-pick', sel.feint === lane);
+      btn.classList.toggle('hot', choosing && risk >= 4);
+      btn.disabled = !choosing || sel.sealed;
+      sub.textContent = choosing ? `по тебе ${risk}` : '';
+      tag.textContent = choosing ? (dash ? 'РЫВОК' : lane === v.you.lane && v.you.stay > 0 ? 'НА МЕСТЕ' : '') : '';
     });
-    spots.forEach((s, l) => {
-      s.classList.toggle('selected', sel.step === l);
-      s.classList.toggle('feint-pick', sel.feint === l);
-      s.disabled = !choosing || sel.sealed;
-      const dash = Math.abs(l - v.you.lane) === 2;
-      const risk = expectedDamage(v, l as Lane, 'you');
-      spotTags[l].textContent = choosing ? (dash ? `РЫВОК · ${risk}` : String(risk)) : '';
-      spotTags[l].title = dash ? 'Рывок: твой удар будет только на 1' : 'Урон по тебе, если прилетит сюда';
-      spotTags[l].classList.toggle('hot', risk >= 4);
-      spotTags[l].classList.toggle('dash', dash);
+    strikeBtns.forEach(({ btn, sub, tag }, l) => {
+      const lane = l as Lane;
+      const predictable = v.you.lastStrike === lane && v.you.strikeRepeat + 1 >= BALANCE.predictable.from;
+      const dmg = Math.max(1, expectedDamage(v, lane, 'opp') - (predictable ? BALANCE.predictable.penalty : 0));
+      btn.classList.toggle('selected', sel.strike === lane);
+      btn.classList.toggle('hot', choosing && dmg >= 4);
+      btn.classList.toggle('opp-here', choosing && lane === v.opp.lane);
+      btn.disabled = !choosing || sel.sealed;
+      sub.textContent = choosing ? `урон ${dmg}` : '';
+      tag.textContent = choosing && lane === v.opp.lane ? 'ОН ТУТ' : '';
     });
 
-    setFig(figYou, v.you.lane);
-    setFig(figOpp, v.opp.lane);
-    const showGhost = choosing && sel.step !== null && sel.step !== v.you.lane;
-    ghost.hidden = !showGhost;
-    if (sel.step !== null) {
-      setFig(ghost, sel.step);
-      (ghost.querySelector('.ghost-label') as HTMLElement).textContent = Math.abs(sel.step - v.you.lane) === 2 ? 'РЫВОК' : '';
+    if (!animating) {
+      place(actorYou, YOU_X[v.you.lane]);
+      place(actorOpp, OPP_X[v.opp.lane]);
+      youSprite.set('idle');
+      oppSprite.set('idle');
     }
-    feintGhost.hidden = !(choosing && sel.feint !== null);
-    if (sel.feint !== null) setFig(feintGhost, sel.feint);
-    oppFeintGhost.hidden = true;
+    const ghostOn = choosing && sel.step !== null && sel.step !== v.you.lane;
+    actorGhost.hidden = !ghostOn;
+    if (ghostOn && sel.step !== null) {
+      place(actorGhost, YOU_X[sel.step]);
+      ghostSprite.set('slip', sel.step > v.you.lane);
+      (actorGhost.querySelector('.ghost-label') as HTMLElement).textContent = Math.abs(sel.step - v.you.lane) === 2 ? 'РЫВОК' : '';
+    }
+    actorFeint.hidden = !(choosing && sel.feint !== null);
+    if (sel.feint !== null) place(actorFeint, YOU_X[sel.feint]);
+    actorOppFeint.hidden = true;
+    reticle.hidden = !(choosing && sel.strike !== null);
+    if (sel.strike !== null) reticle.style.left = `${OPP_X[sel.strike]}%`;
 
     const feintReady = v.you.feint === 'ready' && choosing && !sel.sealed;
     feintBtn.hidden = !feintReady && !(sel.feint !== null && choosing);
     feintBtn.classList.toggle('active', sel.feintMode || sel.feint !== null);
-    feintBtn.textContent = sel.feint !== null ? `ФИНТ: ${LANE_SHORT[sel.feint]} ✕` : sel.feintMode ? 'КУДА ФИНТ?' : 'ФИНТ';
+    feintBtn.textContent = sel.feint !== null ? `ФИНТ: ${LANE_WORD[sel.feint]} ✕` : sel.feintMode ? 'КУДА ФИНТ?' : 'ФИНТ';
 
     readyBtn.disabled = !choosing || sel.sealed || sel.step === null || sel.strike === null;
     readyLabel.textContent = !choosing && v.phase === 'reveal' ? 'СХОД' : sel.sealed && choosing ? 'ЖДЁМ СОПЕРНИКА' : 'ГОТОВ';
@@ -350,10 +402,10 @@ export function matchScreen(root: HTMLElement, session: MatchSession, nav: Match
     let text = '';
     if (v.phase === 'choose' && !animating) {
       if (sel.sealed) text = v.opp.ready ? 'Оба готовы…' : 'Выбор сделан. Соперник думает…';
-      else if (sel.feintMode) text = 'Тапни свою линию, куда показать финт';
-      else if (sel.step === null && sel.strike === null) text = 'Низ — куда уйти · верх — куда ударить';
-      else if (sel.step === null) text = 'Теперь выбери, куда уйти';
-      else if (sel.strike === null) text = 'Теперь выбери, куда ударить';
+      else if (sel.feintMode) text = 'Выбери в ряду УХОД, куда показать финт';
+      else if (sel.step === null && sel.strike === null) text = 'Выбери, куда уйти и куда ударить';
+      else if (sel.step === null) text = 'Теперь — куда уйти';
+      else if (sel.strike === null) text = 'Теперь — куда ударить';
       else text = 'Жми ГОТОВ';
     }
     hint.textContent = text;
@@ -364,26 +416,22 @@ export function matchScreen(root: HTMLElement, session: MatchSession, nav: Match
   function loop(): void {
     raf = requestAnimationFrame(loop);
     const v = view;
-    if (!v || !deadline) {
-      timerBar.style.transform = 'scaleX(0)';
-      timerNum.textContent = '';
-      return;
-    }
-    const left = Math.max(0, deadline - performance.now());
-    if (v.phase === 'choose') {
+    const left = deadline ? Math.max(0, deadline - performance.now()) : 0;
+    if (v && v.phase === 'choose' && deadline && !animating) {
       const total = v.settings.timerSec * 1000;
-      timerBar.style.transform = `scaleX(${Math.min(1, left / total)})`;
       const secs = Math.ceil(left / 1000);
-      timerNum.textContent = animating ? '' : String(secs);
-      readyBtn.classList.toggle('urgent', secs <= 3 && !sel.sealed);
-      if (secs <= 3 && secs > 0 && secs !== lastTick && !sel.sealed && !animating) {
+      timerBar.style.transform = `scaleX(${Math.min(1, left / total)})`;
+      clock.textContent = String(secs);
+      clock.classList.toggle('urgent', secs <= 3 && !sel.sealed);
+      if (secs <= 3 && secs > 0 && secs !== lastTick && !sel.sealed) {
         lastTick = secs;
         sfx.tick();
       }
     } else {
       timerBar.style.transform = 'scaleX(0)';
-      timerNum.textContent = '';
-      if (v.phase === 'dossier') {
+      clock.classList.remove('urgent');
+      if (v && !animating) clock.textContent = v.phase === 'over' ? '—' : '';
+      if (v?.phase === 'dossier') {
         const bar = overlay.querySelector('.countdown') as HTMLElement | null;
         if (bar) bar.style.transform = `scaleX(${Math.min(1, left / BALANCE.timing.dossierMs)})`;
       }
@@ -392,10 +440,17 @@ export function matchScreen(root: HTMLElement, session: MatchSession, nav: Match
   raf = requestAnimationFrame(loop);
 
   // ---------- Сход ----------
-  function popup(zone: Who, lane: Lane, text: string, sub = '', kind = ''): void {
-    const el = h('div', { class: `pop ${kind}`, style: { left: lanePct(lane), top: zone === 'opp' ? '22%' : '72%' } }, h('strong', null, text), sub ? h('small', null, sub) : null);
+  function popup(x: number, y: number, text: string, sub = '', kind = ''): void {
+    const el = h('div', { class: `pop ${kind}`, style: { left: `${x}%`, top: `${y}%` } }, h('strong', null, text), sub ? h('small', null, sub) : null);
     fx.append(el);
     setTimeout(() => el.remove(), 1900);
+  }
+
+  function burst(x: number, y: number, kind: 'impact' | 'dust'): void {
+    const el = h('div', { class: `burst burst-${kind}`, style: { left: `${x}%`, top: `${y}%` } });
+    void probe(art.vfx(kind)).then((ok) => ok && el.classList.add('art'));
+    fx.append(el);
+    setTimeout(() => el.remove(), 900);
   }
 
   function breakdownText(b: DamageBreakdown | null): string {
@@ -407,15 +462,17 @@ export function matchScreen(root: HTMLElement, session: MatchSession, nav: Match
     if (b.dug) parts.push(`Вкопался +${b.dug}`);
     if (b.plate) parts.push(`Плита +${b.plate}`);
     if (b.predictable) parts.push(`Читаемый −${b.predictable}`);
-    return parts.map((part) => part.replace(/ /g, '\u00a0')).join(' · ');
+    return parts.map((part) => part.replace(/ /g, ' ')).join(' · ');
   }
 
   function trail(from: Who, fromLane: Lane, toLane: Lane, hit: boolean): void {
     const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-    line.setAttribute('x1', String(laneX(fromLane)));
-    line.setAttribute('y1', String(TRAIL_Y[from]));
-    line.setAttribute('x2', String(laneX(toLane)));
-    line.setAttribute('y2', String(from === 'you' ? TRAIL_Y.opp : TRAIL_Y.you));
+    const [x1, y1, x2, y2] =
+      from === 'you' ? [YOU_X[fromLane], YOU_HEAD_Y + 4, OPP_X[toLane], OPP_HEAD_Y] : [OPP_X[fromLane], OPP_HEAD_Y + 4, YOU_X[toLane], YOU_HEAD_Y];
+    line.setAttribute('x1', String(x1));
+    line.setAttribute('y1', String(y1));
+    line.setAttribute('x2', String(x2));
+    line.setAttribute('y2', String(y2));
     line.setAttribute('vector-effect', 'non-scaling-stroke');
     line.setAttribute('class', `trail trail-${from}${hit ? ' trail-hit' : ''}`);
     line.setAttribute('pathLength', '1');
@@ -431,9 +488,9 @@ export function matchScreen(root: HTMLElement, session: MatchSession, nav: Match
 
   function shake(strength: number): void {
     if (reducedMotion()) return;
-    arena.classList.remove('shake-1', 'shake-2');
-    void arena.offsetWidth;
-    arena.classList.add(strength > 3 ? 'shake-2' : 'shake-1');
+    stage.classList.remove('shake-1', 'shake-2');
+    void stage.offsetWidth;
+    stage.classList.add(strength > 3 ? 'shake-2' : 'shake-1');
   }
 
   function outcomeLabel(ex: ExchangeView): { text: string; kind: string } {
@@ -452,223 +509,143 @@ export function matchScreen(root: HTMLElement, session: MatchSession, nav: Match
     animating = true;
     screen.dataset.phase = 'reveal';
     screen.classList.remove('choosing', 'sealed', 'feint-mode');
-    ghost.hidden = true;
-    feintGhost.hidden = true;
-    targets.forEach((t) => t.classList.remove('selected'));
-    spots.forEach((s) => s.classList.remove('selected', 'feint-pick'));
+    actorGhost.hidden = true;
+    actorFeint.hidden = true;
+    reticle.hidden = true;
     hint.textContent = '';
-    timerNum.textContent = '';
+    clock.textContent = '';
     readyLabel.textContent = 'СХОД';
     readyBtn.disabled = true;
-    readyBtn.classList.remove('urgent');
     feintBtn.hidden = true;
-    [...targetTags, ...spotTags].forEach((t) => (t.textContent = ''));
+    [...stepBtns, ...strikeBtns].forEach(({ btn, sub, tag }) => {
+      btn.classList.remove('selected', 'feint-pick', 'hot', 'opp-here');
+      btn.disabled = true;
+      sub.textContent = '';
+      tag.textContent = '';
+    });
 
-    // 1. Тишина.
-    arena.classList.add('clash');
-    setFig(figYou, ex.you.from);
-    setFig(figOpp, ex.opp.from);
-    showBanner('СХОД', 'clash', 500);
+    // 1. Тишина: кинополосы, камера подъезжает.
+    scene.classList.add('cine');
+    place(actorYou, YOU_X[ex.you.from]);
+    place(actorOpp, OPP_X[ex.opp.from]);
+    youSprite.set('idle');
+    oppSprite.set('idle');
+    showBanner('СХОД', 'clash', 480);
     await wait(320);
     if (disposed) return;
 
-    // 2. Раскрытие: бойцы встают на выбранные линии, финты видны.
-    setFig(figYou, ex.you.step);
-    setFig(figOpp, ex.opp.step);
-    figYou.classList.toggle('dash', ex.you.dash);
-    figOpp.classList.toggle('dash', ex.opp.dash);
+    // 2. Уходы: бойцы смещаются, финты раскрываются.
+    const moveYou = ex.you.step - ex.you.from;
+    const moveOpp = ex.opp.step - ex.opp.from;
+    actorYou.classList.toggle('dash', ex.you.dash);
+    actorOpp.classList.toggle('dash', ex.opp.dash);
+    place(actorYou, YOU_X[ex.you.step]);
+    place(actorOpp, OPP_X[ex.opp.step]);
+    youSprite.set(moveYou ? 'slip' : 'idle', moveYou > 0);
+    oppSprite.set(moveOpp ? 'slip' : 'idle', moveOpp > 0);
+    if (ex.you.dash) burst(YOU_X[ex.you.step], 92, 'dust');
+    if (ex.opp.dash) burst(OPP_X[ex.opp.step], 68, 'dust');
     if (ex.you.feint !== null) {
-      setFig(feintGhost, ex.you.feint);
-      feintGhost.hidden = false;
+      place(actorFeint, YOU_X[ex.you.feint]);
+      actorFeint.hidden = false;
     }
     if (ex.opp.feint !== null) {
-      setFig(oppFeintGhost, ex.opp.feint);
-      oppFeintGhost.hidden = false;
+      place(actorOppFeint, OPP_X[ex.opp.feint]);
+      oppFeintSprite.set('slip', ex.opp.feint > ex.opp.from);
+      actorOppFeint.hidden = false;
     }
-    await wait(380);
+    await wait(360);
     if (disposed) return;
 
-    // 3. Удары.
-    figYou.classList.add(`punch-${ex.you.strike}`);
-    figOpp.classList.add(`punch-${ex.opp.strike}`);
+    // 3. Удары: боковой — если бьёшь в другую линию, прямой — если перед собой.
+    const dirYou = ex.you.strike - ex.you.step;
+    const dirOpp = ex.opp.strike - ex.opp.step;
+    youSprite.set(dirYou ? 'hook' : 'straight', dirYou > 0);
+    oppSprite.set(dirOpp ? 'hook' : 'straight', dirOpp > 0);
     trail('you', ex.you.step, ex.you.strike, ex.you.hit);
     trail('opp', ex.opp.step, ex.opp.strike, ex.opp.hit);
     if (!ex.you.hit || !ex.opp.hit) sfx.whoosh();
-    await wait(260);
+    await wait(220);
     if (disposed) return;
 
-    // 4. Итог.
+    // 4. Попадания.
     let maxDmg = 0;
-    for (const who of ['you', 'opp'] as Who[]) {
-      const me = ex[who];
-      const target: Who = who === 'you' ? 'opp' : 'you';
-      const targetFig = target === 'you' ? figYou : figOpp;
-      if (me.caught) {
-        popup(target, me.strike, 'ФИНТ!', 'удар провалился', 'feint');
-      } else if (me.hit) {
-        popup(target, ex[target].step, `−${me.hitDamage}`, breakdownText(me.breakdown), `dmg ${who}`);
-        targetFig.classList.add('hurt');
-        maxDmg = Math.max(maxDmg, me.hitDamage);
-      } else {
-        popup(target, me.strike, 'МИМО', '', 'miss');
-      }
-      if (me.countered) {
-        setTimeout(() => popup(target, ex[target].step, `−${me.counterDamage}`, 'Контра', `dmg ${who}`), 260);
-        targetFig.classList.add('hurt');
-        maxDmg = Math.max(maxDmg, me.counterDamage);
-      }
+    const flashes: (() => void)[] = [];
+    if (ex.you.caught) popup(OPP_X[ex.opp.feint ?? ex.you.strike], OPP_HEAD_Y, 'ФИНТ!', 'удар провалился', 'feint');
+    else if (ex.you.hit) {
+      oppSprite.set(dirYou ? 'hit_side' : 'hit_center', dirYou < 0);
+      burst(OPP_X[ex.opp.step], OPP_HEAD_Y, 'impact');
+      flashes.push(() => popup(OPP_X[ex.opp.step], OPP_HEAD_Y - 6, `−${ex.you.hitDamage}`, breakdownText(ex.you.breakdown), 'dmg you'));
+      maxDmg = Math.max(maxDmg, ex.you.hitDamage);
+    } else popup(OPP_X[ex.you.strike], OPP_HEAD_Y, 'МИМО', '', 'miss');
+    if (ex.opp.caught) popup(YOU_X[ex.you.feint ?? ex.opp.strike], YOU_HEAD_Y, 'ФИНТ!', 'удар провалился', 'feint');
+    else if (ex.opp.hit) {
+      youSprite.set('hit', dirOpp < 0);
+      burst(YOU_X[ex.you.step], YOU_HEAD_Y, 'impact');
+      flashes.push(() => popup(YOU_X[ex.you.step], YOU_HEAD_Y - 4, `−${ex.opp.hitDamage}`, breakdownText(ex.opp.breakdown), 'dmg opp'));
+      maxDmg = Math.max(maxDmg, ex.opp.hitDamage);
+    } else popup(YOU_X[ex.opp.strike], YOU_HEAD_Y, 'МИМО', '', 'miss');
+    if (ex.you.countered) {
+      oppSprite.set('hit_center');
+      flashes.push(() => setTimeout(() => popup(OPP_X[ex.opp.step], OPP_HEAD_Y + 6, `−${ex.you.counterDamage}`, 'Контра', 'dmg you'), 240));
+      maxDmg = Math.max(maxDmg, ex.you.counterDamage);
+    }
+    if (ex.opp.countered) {
+      youSprite.set('hit');
+      flashes.push(() => setTimeout(() => popup(YOU_X[ex.you.step], YOU_HEAD_Y + 6, `−${ex.opp.counterDamage}`, 'Контра', 'dmg opp'), 240));
+      maxDmg = Math.max(maxDmg, ex.opp.counterDamage);
     }
     if (maxDmg > 0) {
+      scene.classList.add('flash');
+      stage.classList.add('hitstop');
       sfx.hit(maxDmg);
+      await wait(120);
+      scene.classList.remove('flash');
+      stage.classList.remove('hitstop');
       shake(maxDmg);
-      arena.classList.add('hitstop');
-      await wait(90);
-      arena.classList.remove('hitstop');
     }
+    flashes.forEach((f) => f());
     renderHud(v);
     const label = outcomeLabel(ex);
     showBanner(label.text, label.kind, 1100);
-    if (ex.brokenNow.length) ex.brokenNow.forEach((l) => popup(ex.you.step === l ? 'you' : 'opp', l, 'ПЛИТА РАЗБИТА', '', 'plate'));
-    await wait(1000);
+    ex.brokenNow.forEach((l) => popup(l === ex.opp.step ? OPP_X[l] : YOU_X[l], 80, 'ПЛИТА РАЗБИТА', '', 'plate'));
+    await wait(900);
     if (disposed) return;
 
-    // 5. Конец раунда.
+    // 5. Нокаут или возврат в стойку.
     if (ex.roundWinner) {
-      const loserFig = ex.roundWinner === 'you' ? figOpp : figYou;
-      loserFig.classList.add('ko');
+      const loser = ex.roundWinner === 'you' ? oppSprite : youSprite;
+      const loserActor = ex.roundWinner === 'you' ? actorOpp : actorYou;
+      loser.set('ko');
+      loserActor.classList.add('ko');
+      scene.classList.add('ko-moment');
       sfx.ko();
       showBanner('НОКАУТ', ex.roundWinner === 'you' ? 'good big' : 'bad big', 1300);
       await wait(1300);
+      loserActor.classList.remove('ko');
+      scene.classList.remove('ko-moment');
     } else if (ex.suddenDeathStarted) {
       showBanner('ПОСЛЕДНИЙ СХОД', 'heat big', 1100);
       await wait(1000);
     }
-
-    figYou.classList.remove('hurt', 'punch-0', 'punch-1', 'punch-2', 'dash', 'ko');
-    figOpp.classList.remove('hurt', 'punch-0', 'punch-1', 'punch-2', 'dash', 'ko');
-    oppFeintGhost.hidden = true;
-    feintGhost.hidden = true;
-    arena.classList.remove('clash');
+    youSprite.set('idle');
+    oppSprite.set('idle');
+    actorYou.classList.remove('dash');
+    actorOpp.classList.remove('dash');
+    actorFeint.hidden = true;
+    actorOppFeint.hidden = true;
+    scene.classList.remove('cine');
     animating = false;
   }
 
-  // ---------- Досье и итог боя ----------
-  function habitList(items: Habit[], empty: string): HTMLElement {
-    return items.length
-      ? h('ul', { class: 'habits' }, ...items.map((hb) => h('li', null, hb.text)))
-      : h('p', { class: 'muted' }, empty);
-  }
-
-  function renderDossier(v: PlayerView): void {
-    const key = `d:${v.boutId}:${v.roundNo}`;
-    if (overlayKey === key) return;
-    overlayKey = key;
-    const d = v.dossier!;
-    const winner = v.last?.roundWinner;
-    const skipBtn = h('button', { class: 'btn btn-primary', onclick: () => {
-      session.skip();
-      skipBtn.disabled = true;
-      skipBtn.textContent = 'ЖДЁМ СОПЕРНИКА';
-    } }, 'ДАЛЬШЕ');
-    overlay.replaceChildren(
-      h(
-        'div',
-        { class: 'panel' },
-        h('div', { class: 'kicker' }, `РАУНД ${v.roundNo}`),
-        h('h2', { class: winner === 'you' ? 'good' : 'bad' }, winner === 'you' ? 'РАУНД ЗА ТОБОЙ' : `РАУНД ЗА: ${v.opp.name}`),
-        h('div', { class: 'score' }, h('span', null, String(v.wins.you)), h('i', null, ':'), h('span', null, String(v.wins.opp))),
-        h('h3', null, 'ДОСЬЕ'),
-        h('section', { class: 'dossier' },
-          h('h4', null, 'ПРО ТЕБЯ ', h('small', null, 'это видит и соперник')),
-          habitList(d.aboutYou, 'Явных привычек пока нет — хорошо прячешься.'),
-          h('h4', null, `ПРО: ${v.opp.name}`),
-          habitList(d.aboutOpp, 'Соперник пока не выдал себя. Смотри на Ленту.'),
-        ),
-        h('div', { class: 'countdown-wrap' }, h('span', { class: 'countdown' })),
-        skipBtn,
-      ),
-    );
-    overlay.classList.add('show');
-  }
-
-  function statBlock(title: string, s: SideStats, you: boolean): HTMLElement {
-    const idx = Math.round(s.readIndex * 100);
-    const max = Math.max(1, ...s.heatmap.flat());
-    return h(
-      'div',
-      { class: `stat ${you ? 'stat-you' : 'stat-opp'}` },
-      h('h4', null, title),
-      h('div', { class: 'read' },
-        h('span', { class: 'read-num' }, `${idx}%`),
-        h('span', { class: 'read-label' }, 'индекс чтения'),
-      ),
-      h('div', { class: 'read-bar' }, h('span', { class: 'fill', style: { width: `${Math.min(100, idx * 1.5)}%` } }), h('span', { class: 'base', style: { left: `${33 * 1.5}%` }, title: 'случайная игра — 33%' })),
-      h('dl', null,
-        h('dt', null, 'попал'), h('dd', null, `${s.hits}/${s.exchanges}`),
-        h('dt', null, 'урон'), h('dd', null, String(s.damageDealt)),
-        h('dt', null, 'серия'), h('dd', null, String(s.bestStreak)),
-      ),
-      h('div', { class: 'heatmap', title: 'Строки — куда уходил, столбцы — куда бил (Л/Ц/П на твоём экране)' },
-        h('span', { class: 'hm-corner' }, 'уход╲удар'), ...LANES.map((l) => h('span', { class: 'hm-head' }, LANE_SHORT[l])),
-        ...s.heatmap.flatMap((row, step) => [
-          h('span', { class: 'hm-head' }, LANE_SHORT[step]),
-          ...row.map((n) => h('span', { class: 'hm-cell', style: { '--a': String(n / max) } as unknown as Record<string, string> }, n ? String(n) : '')),
-        ]),
-      ),
-    );
-  }
-
-  function renderOver(v: PlayerView): void {
-    const s = v.summary!;
-    const key = `o:${v.boutId}:${v.rematch.you}:${v.rematch.opp}:${v.opp.connected}`;
-    if (overlayKey === key) return;
-    overlayKey = key;
-    const won = s.winner === 'you';
-    if (recordedBout !== v.boutId) {
-      recordedBout = v.boutId;
-      store.addResult(v.opp.name, won);
-      if (won) sfx.win();
-    }
-    const rec = store.record(v.opp.name);
-    const youIdx = Math.round(s.you.readIndex * 100);
-    const oppIdx = Math.round(s.opp.readIndex * 100);
-    const better = youIdx === oppIdx ? 'Читали друг друга одинаково' : youIdx > oppIdx ? 'Ты читал соперника лучше' : `${v.opp.name} читал тебя лучше`;
-    const rematchBtn = h('button', { class: 'btn btn-primary', disabled: v.rematch.you, onclick: () => {
-      session.rematch();
-      rematchBtn.disabled = true;
-    } }, v.rematch.you ? 'ЖДЁМ СОПЕРНИКА' : won ? 'РЕВАНШ' : 'ТРЕБУЮ РЕВАНША');
-    overlay.replaceChildren(
-      h(
-        'div',
-        { class: 'panel result' },
-        h('div', { class: 'kicker' }, 'БОЙ ОКОНЧЕН'),
-        h('h2', { class: won ? 'good' : 'bad' }, won ? 'ПОБЕДА' : 'ПОРАЖЕНИЕ'),
-        h('div', { class: 'score' }, h('span', null, String(v.wins.you)), h('i', null, ':'), h('span', null, String(v.wins.opp))),
-        h('p', { class: 'lead' }, `${better}: ${youIdx}% против ${oppIdx}%`),
-        h('div', { class: 'stats' }, statBlock('ТЫ', s.you, true), statBlock(v.opp.name, s.opp, false)),
-        h('h3', null, 'ДОСЬЕ'),
-        h('section', { class: 'dossier' },
-          h('h4', null, 'ПРО ТЕБЯ'),
-          habitList(v.dossier?.aboutYou ?? [], 'Ни одной явной привычки. Уважение.'),
-          h('h4', null, `ПРО: ${v.opp.name}`),
-          habitList(v.dossier?.aboutOpp ?? [], 'Соперник не выдал себя.'),
-        ),
-        h('div', { class: 'series' },
-          session.online ? h('span', null, `В этой комнате: ${v.series.you} : ${v.series.opp}`) : null,
-          h('span', null, `Летопись против «${v.opp.name}»: ${rec.wins} : ${rec.losses}`),
-        ),
-        v.rematch.opp && !v.rematch.you ? h('p', { class: 'callout' }, `${v.opp.name} хочет реванш!`) : null,
-        !v.opp.connected ? h('p', { class: 'muted' }, 'Соперник отключился.') : null,
-        h('div', { class: 'row' }, rematchBtn, h('button', { class: 'btn', onclick: () => {
-          session.leave();
-          nav.menu();
-        } }, 'В МЕНЮ')),
-      ),
-    );
-    overlay.classList.add('show');
-  }
-
   // ---------- Приём состояния ----------
+  function showOverlay(key: string, panel: () => HTMLElement): void {
+    if (overlayKey === key) return;
+    overlayKey = key;
+    overlay.replaceChildren(panel());
+    overlay.classList.add('show');
+  }
+
   function render(v: PlayerView): void {
     view = v;
     const key = `${v.boutId}:${v.roundNo}:${v.exchangeNo}`;
@@ -683,9 +660,29 @@ export function matchScreen(root: HTMLElement, session: MatchSession, nav: Match
     renderHud(v);
     renderChoice();
     screen.dataset.phase = v.phase;
-    if (v.phase === 'dossier' && v.dossier) renderDossier(v);
-    else if (v.phase === 'over' && v.summary) renderOver(v);
-    else if (overlayKey) {
+    if (v.phase === 'dossier' && v.dossier) {
+      showOverlay(`d:${v.boutId}:${v.roundNo}`, () => dossierPanel(v, () => session.skip()));
+    } else if (v.phase === 'over' && v.summary) {
+      const won = v.summary.winner === 'you';
+      if (recordedBout !== v.boutId) {
+        recordedBout = v.boutId;
+        store.addResult(v.opp.name, won);
+        if (won) sfx.win();
+      }
+      showOverlay(`o:${v.boutId}:${v.rematch.you}:${v.rematch.opp}:${v.opp.connected}`, () =>
+        resultPanel(v, {
+          online: session.online,
+          record: store.record(v.opp.name),
+          onRematch: () => session.rematch(),
+          onMenu: () => {
+            session.leave();
+            nav.menu();
+          },
+        }),
+      );
+      youSprite.set(won ? 'idle' : 'ko');
+      oppSprite.set(won ? 'ko' : 'victory');
+    } else if (overlayKey) {
       overlayKey = '';
       overlay.classList.remove('show');
       overlay.replaceChildren();
@@ -723,9 +720,9 @@ export function matchScreen(root: HTMLElement, session: MatchSession, nav: Match
   session.onView = apply;
   session.onEmote = (from, id) => {
     const bubble = from === 'you' ? bubbleYou : bubbleOpp;
-    const fig = from === 'you' ? figYou : figOpp;
+    const actor = from === 'you' ? actorYou : actorOpp;
     bubble.textContent = EMOTES[id] ?? '';
-    bubble.style.left = fig.style.left;
+    bubble.style.left = actor.style.left;
     bubble.classList.remove('show');
     void bubble.offsetWidth;
     bubble.classList.add('show');

@@ -1,6 +1,7 @@
 import { BALANCE, Balance } from './balance';
 import { autoChoice, newBout, playExchange, startNextRound } from './bout';
 import { findHabits, sideStats } from './dossier';
+import { FighterId } from './fighters';
 import type {
   ChoiceMsg,
   DossierView,
@@ -25,6 +26,8 @@ export interface Scheduler {
 export interface HostOptions {
   settings: BoutSettings;
   names: Pair<string>;
+  /** Внешность бойцов; по умолчанию — Бородач против Лысого. */
+  fighters?: Pair<FighterId>;
   scheduler: Scheduler;
   /** Вызывается после любого изменения, которое должны увидеть игроки. */
   onChange: () => void;
@@ -53,6 +56,7 @@ export class BoutHost {
   private emoteUsed: Pair<boolean> = [false, false];
   private disposed = false;
   readonly names: Pair<string>;
+  readonly fighters: Pair<FighterId>;
   readonly settings: BoutSettings;
   connected: Pair<boolean> = [true, true];
   series: Pair<number> = [0, 0];
@@ -62,6 +66,7 @@ export class BoutHost {
     this.scheduler = opts.scheduler;
     this.onChange = opts.onChange;
     this.names = opts.names;
+    this.fighters = opts.fighters ?? ['borodach', 'lysy'];
     this.settings = opts.settings;
     this.bout = newBout(opts.settings, this.balance);
     this.startChoose(false);
@@ -200,6 +205,7 @@ export class BoutHost {
       const f = r.fighters[i];
       return {
         name: this.names[i],
+        fighter: this.fighters[i],
         hp: f.hp,
         maxHp: this.balance.maxHp,
         lane: mirror(f.lane, side),

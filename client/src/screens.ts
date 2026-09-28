@@ -4,14 +4,17 @@ import {
   BotId,
   BoutSettings,
   CODE_LENGTH,
+  FIGHTERS,
   NAME_MAX,
   ServerMsg,
   cleanCode,
+  cleanFighter,
   cleanName,
   defaultSettings,
 } from '@hj/shared';
 import { net } from './net';
 import { randomName } from './names';
+import { portrait } from './sprites';
 import { store } from './store';
 import { h, icon, toast } from './ui';
 
@@ -48,6 +51,22 @@ function nameField(): HTMLElement {
     input.value = store.name;
   } }, icon('dice'));
   return h('label', { class: 'field' }, h('span', { class: 'field-label' }, 'ТВОЁ ПРОЗВИЩЕ'), h('div', { class: 'field-row' }, input, dice));
+}
+
+/** Выбор бойца: только внешность, на силу не влияет. */
+function fighterPicker(): HTMLElement {
+  const current = cleanFighter(store.fighter);
+  const cards = FIGHTERS.map((f) =>
+    h('button', { class: `fighter-card${f.id === current ? ' on' : ''}`, 'aria-pressed': String(f.id === current), onclick: () => {
+      store.fighter = f.id;
+      cards.forEach((c, i) => {
+        const on = FIGHTERS[i].id === f.id;
+        c.classList.toggle('on', on);
+        c.setAttribute('aria-pressed', String(on));
+      });
+    } }, portrait(f.id), h('strong', null, f.name), h('span', null, f.tagline)),
+  );
+  return h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'ТВОЙ БОЕЦ'), h('div', { class: 'fighters' }, ...cards));
 }
 
 function topBar(nav: Nav, title: string): HTMLElement {
@@ -97,6 +116,7 @@ export function menuScreen(root: HTMLElement, nav: Nav): void {
       ),
       h('div', { class: 'menu-body' },
         nameField(),
+        fighterPicker(),
         h('div', { class: 'stack' },
           h('button', { class: 'btn btn-primary btn-big', onclick: () => nav.create() }, 'СОЗДАТЬ БОЙ'),
           h('button', { class: 'btn btn-big', onclick: () => nav.join() }, 'ВОЙТИ ПО КОДУ'),
@@ -116,7 +136,7 @@ export function createScreen(root: HTMLElement, nav: Nav): () => void {
   const start = h('button', { class: 'btn btn-primary btn-big', onclick: () => {
     start.disabled = true;
     net.connect();
-    net.send({ t: 'create', name: playerName(), settings });
+    net.send({ t: 'create', name: playerName(), fighter: store.fighter, settings });
   } }, 'СОЗДАТЬ И ПОЗВАТЬ ДРУГА');
   const off = net.on((msg: ServerMsg) => {
     if (msg.t === 'lobby') {
@@ -128,7 +148,7 @@ export function createScreen(root: HTMLElement, nav: Nav): () => void {
       start.disabled = false;
     }
   });
-  root.append(h('div', { class: 'screen page' }, topBar(nav, 'НОВЫЙ БОЙ'), h('div', { class: 'page-body' }, nameField(), settingsFields(settings), start)));
+  root.append(h('div', { class: 'screen page' }, topBar(nav, 'НОВЫЙ БОЙ'), h('div', { class: 'page-body' }, nameField(), fighterPicker(), settingsFields(settings), start)));
   return off;
 }
 
@@ -199,7 +219,7 @@ function joinFlow(code: string, nav: Nav, onError: (message: string) => void): (
     }
   });
   net.connect();
-  net.send({ t: 'join', code, name: playerName(), token: store.seat(code) ?? undefined });
+  net.send({ t: 'join', code, name: playerName(), fighter: store.fighter, token: store.seat(code) ?? undefined });
   return off;
 }
 
@@ -230,7 +250,7 @@ export function joinScreen(root: HTMLElement, nav: Nav): () => void {
       btn.disabled = false;
     });
   }
-  root.append(h('div', { class: 'screen page' }, topBar(nav, 'ВОЙТИ ПО КОДУ'), h('div', { class: 'page-body' }, nameField(), h('label', { class: 'field' }, h('span', { class: 'field-label' }, 'КОД БОЯ'), input), btn)));
+  root.append(h('div', { class: 'screen page' }, topBar(nav, 'ВОЙТИ ПО КОДУ'), h('div', { class: 'page-body' }, nameField(), fighterPicker(), h('label', { class: 'field' }, h('span', { class: 'field-label' }, 'КОД БОЯ'), input), btn)));
   setTimeout(() => input.focus(), 50);
   return () => off?.();
 }
@@ -275,7 +295,7 @@ export function inviteScreen(root: HTMLElement, nav: Nav, code: string): () => v
       'div',
       { class: 'screen page invite' },
       h('div', { class: 'hero small' }, h('img', { class: 'key-art', src: '/brand/key-art.webp', alt: '' })),
-      h('div', { class: 'page-body' }, title, sub, nameField(), accept, h('button', { class: 'btn btn-ghost', onclick: () => {
+      h('div', { class: 'page-body' }, title, sub, nameField(), fighterPicker(), accept, h('button', { class: 'btn btn-ghost', onclick: () => {
         net.stop();
         nav.menu();
       } }, 'В МЕНЮ')),
@@ -304,6 +324,7 @@ export function sparringScreen(root: HTMLElement, nav: Nav): void {
       topBar(nav, 'СПАРРИНГ'),
       h('div', { class: 'page-body' },
         h('p', { class: 'muted' }, 'У каждого бота своя привычка. Найди её — так учатся читать живых соперников.'),
+        fighterPicker(),
         h('div', { class: 'bots' }, ...cards),
         settingsFields(settings),
         h('button', { class: 'btn btn-primary btn-big', onclick: () => nav.sparringMatch(bot, settings) }, 'В ЯМУ'),
@@ -323,8 +344,8 @@ export function rulesScreen(root: HTMLElement, nav: Nav): void {
       { class: 'screen page rules' },
       topBar(nav, 'КАК ИГРАТЬ'),
       h('div', { class: 'page-body' },
-        card('СХОД', 'Каждый сход вы оба одновременно выбираете две вещи: на какую линию уйти (низ экрана) и в какую линию ударить (верх). Потом «Готов».', 'Удар попадает, если пришёлся в линию, где стоит соперник. Попасть могут оба сразу — это размен.'),
-        card('ЗДОРОВЬЕ И УРОН', `У каждого ${B.maxHp} здоровья, базовый удар — ${B.baseDamage}. Одно попадание — не больше ${B.hitDamage.max}. Кто первым упал — проиграл раунд. Бой — до 2 (или 3) побед.`, 'Цифры на линиях подсказывают урон: сверху — сколько нанесёшь, снизу — сколько получишь.'),
+        card('СХОД', 'Каждый сход вы оба одновременно выбираете две вещи: куда уйти (ряд УХОД) и куда ударить (ряд УДАР) — влево, в центр или вправо. Потом «Готов». Твой боец стоит спиной к нам, соперник — лицом.', 'Удар попадает, если пришёлся в линию, где стоит соперник. Попасть могут оба сразу — это размен.'),
+        card('ЗДОРОВЬЕ И УРОН', `У каждого ${B.maxHp} здоровья, базовый удар — ${B.baseDamage}. Одно попадание — не больше ${B.hitDamage.max}. Кто первым упал — проиграл раунд. Бой — до 2 (или 3) побед.`, 'Подсказки на кнопках: в ряду УДАР — сколько нанесёшь, в ряду УХОД — сколько получишь, если прилетит туда.'),
         card('НАКАЛ', `Сход, где никто не попал, поднимает Накал на +1 (до +${B.heat.max}). Следующее попадание забирает весь Накал себе.`),
         card('СЕРИЯ', `Попал, а по тебе нет — это чистое чтение. Второе подряд даёт +${B.streak.bonusByCount[2]}, третье — Сокрушение: +${B.streak.bonusByCount[3]} и плита под соперником ломается.`),
         card('ВКОПАЛСЯ', `Стоишь на той же линии второй сход подряд — по тебе +${B.dug.bonusByStay[2]}, третий и дальше — +${B.dug.bonusByStay[3]}. Третий удар подряд в ту же линию слабее на ${B.predictable.penalty}.`),

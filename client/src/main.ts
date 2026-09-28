@@ -1,4 +1,4 @@
-import { BoutSettings, BotId, cleanCode } from '@hj/shared';
+import { BoutSettings, BotId, cleanCode, cleanFighter } from '@hj/shared';
 import { matchScreen } from './match';
 import { net } from './net';
 import { createScreen, inviteScreen, joinScreen, lobbyScreen, menuScreen, Nav, rulesScreen, sparringScreen } from './screens';
@@ -61,7 +61,7 @@ const nav: Nav = {
     show((root) => sparringScreen(root, nav));
   },
   sparringMatch(bot: BotId, settings: BoutSettings) {
-    const s = new LocalSession(store.name || 'Ты', bot, settings);
+    const s = new LocalSession(store.name || 'Ты', cleanFighter(store.fighter), bot, settings);
     show((root) => {
       const off = matchScreen(root, s, nav);
       return () => {
