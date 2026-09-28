@@ -1,0 +1,22 @@
+{
+  "maxHp": 10,
+  "baseDamage": 2,
+  "fatigue": { "fromExchange": 13, "baseDamage": 3 },
+  "hitDamage": { "min": 1, "max": 5 },
+  "dashDamage": 1,
+  "heat": { "perEmptyExchange": 1, "max": 3 },
+  "streak": { "bonusByCount": [0, 0, 1, 2], "crushFrom": 3 },
+  "dug": { "bonusByStay": [0, 0, 1, 2] },
+  "predictable": { "from": 3, "penalty": 1 },
+  "plates": { "cracksToBreak": 3, "brokenBonus": 1 },
+  "feint": { "unlockHp": 4, "unlockDeficit": 4, "counterDamage": 2 },
+  "fog": { "hp": 2 },
+  "ribbonLength": 3,
+  "timing": {
+    "revealMs": 3200,
+    "dossierMs": 8000,
+    "timerOptionsSec": [6, 8, 12],
+    "defaultTimerSec": 8
+  },
+  "bout": { "winsOptions": [2, 3], "defaultWins": 2 }
+}

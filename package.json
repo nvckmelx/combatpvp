@@ -1,0 +1,27 @@
+{
+  "name": "hujarilovo",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "shared",
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n server,client -c red,gray \"npm run dev -w server\" \"npm run dev -w client\"",
+    "test": "npm run test -w shared",
+    "typecheck": "tsc -p shared && tsc -p server && tsc -p client && tsc -p tools",
+    "build": "npm run typecheck && npm run build -w client && npm run build -w server",
+    "start": "node server/dist/index.js",
+    "sim": "tsx tools/sim.ts"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "@types/node": "^22.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
