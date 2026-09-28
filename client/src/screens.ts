@@ -12,6 +12,7 @@ import {
   cleanName,
   defaultSettings,
 } from '@hj/shared';
+import { sfx } from './audio';
 import { net } from './net';
 import { randomName } from './names';
 import { portrait } from './sprites';
@@ -69,6 +70,15 @@ function fighterPicker(): HTMLElement {
   return h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'ТВОЙ БОЕЦ'), h('div', { class: 'fighters' }, ...cards));
 }
 
+/** Кнопка звука: выключает и музыку, и эффекты. */
+function soundToggle(): HTMLElement {
+  const btn = h('button', { class: 'icon-btn sound-toggle', 'aria-label': 'Звук и музыка', onclick: () => {
+    sfx.toggle();
+    btn.replaceChildren(icon(sfx.muted ? 'mute' : 'sound'));
+  } }, icon(sfx.muted ? 'mute' : 'sound'));
+  return btn;
+}
+
 function topBar(nav: Nav, title: string): HTMLElement {
   return h('div', { class: 'topbar' }, h('button', { class: 'icon-btn', 'aria-label': 'Назад', onclick: () => nav.menu() }, icon('back')), h('h2', null, title));
 }
@@ -112,6 +122,7 @@ export function menuScreen(root: HTMLElement, nav: Nav): void {
       { class: 'screen menu' },
       h('div', { class: 'hero' },
         h('img', { class: 'key-art', src: '/brand/key-art.webp', alt: '' }),
+        soundToggle(),
         h('img', { class: 'wordmark', src: '/brand/wordmark.webp', alt: 'HUJARILOVO — Fight beyond limits' }),
       ),
       h('div', { class: 'menu-body' },

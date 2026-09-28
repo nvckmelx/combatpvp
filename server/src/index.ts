@@ -23,6 +23,7 @@ const MIME: Record<string, string> = {
   '.webmanifest': 'application/manifest+json',
   '.woff2': 'font/woff2',
   '.txt': 'text/plain; charset=utf-8',
+  '.mp3': 'audio/mpeg',
 };
 
 const rooms = new Rooms();

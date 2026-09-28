@@ -1,4 +1,5 @@
 import { BoutSettings, BotId, cleanCode, cleanFighter } from '@hj/shared';
+import { music } from './audio';
 import { matchScreen } from './match';
 import { net } from './net';
 import { createScreen, inviteScreen, joinScreen, lobbyScreen, menuScreen, Nav, rulesScreen, sparringScreen } from './screens';
@@ -34,6 +35,7 @@ function show(render: (root: HTMLElement) => (() => void) | void): void {
 
 const nav: Nav = {
   menu() {
+    music.play('menu');
     net.stop();
     setUrl(null);
     show((root) => menuScreen(root, nav));
@@ -45,6 +47,7 @@ const nav: Nav = {
     show((root) => joinScreen(root, nav));
   },
   invite(code: string) {
+    music.play('menu');
     setUrl(code);
     show((root) => inviteScreen(root, nav, code));
   },
@@ -53,14 +56,17 @@ const nav: Nav = {
     show((root) => lobbyScreen(root, nav, code, settings));
   },
   onlineMatch(code: string) {
+    music.play('fight');
     setUrl(code);
     const s = new NetSession(code);
     show((root) => matchScreen(root, s, nav));
   },
   sparring() {
+    music.play('menu');
     show((root) => sparringScreen(root, nav));
   },
   sparringMatch(bot: BotId, settings: BoutSettings) {
+    music.play('fight');
     const s = new LocalSession(store.name || 'Ты', cleanFighter(store.fighter), bot, settings);
     show((root) => {
       const off = matchScreen(root, s, nav);

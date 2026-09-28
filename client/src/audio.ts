@@ -19,6 +19,8 @@ class Sfx {
   toggle(): boolean {
     this.muted = !this.muted;
     store.muted = this.muted;
+    music.setMuted(this.muted);
+    if (this.muted) this.announcer?.pause();
     return this.muted;
   }
 
@@ -105,11 +107,140 @@ class Sfx {
     this.tone(60, 1.4, 'sine', 0.4, 28);
   }
 
+  private announcer: HTMLAudioElement | null = null;
+
+  /** Голос анонсера перед раундом (файл, а не синтез). Заранее прогреваем, чтобы не опаздывал. */
+  preloadAnnouncer(): void {
+    if (this.announcer) return;
+    this.announcer = new Audio('/audio/round.mp3');
+    this.announcer.preload = 'auto';
+    this.announcer.volume = 0.9;
+  }
+
+  roundStart(): void {
+    if (this.muted) return;
+    this.preloadAnnouncer();
+    const el = this.announcer!;
+    el.currentTime = 0;
+    void el.play().catch(() => {});
+  }
+
   win(): void {
     this.tone(196, 0.3, 'triangle', 0.14);
     this.tone(262, 0.3, 'triangle', 0.14, 262, 0.18);
     this.tone(392, 0.6, 'triangle', 0.16, 392, 0.36);
   }
 }
+
+export type Track = 'menu' | 'fight';
+
+const TRACKS: Record<Track, string> = {
+  menu: '/audio/menu.mp3',
+  fight: '/audio/fight.mp3',
+};
+
+/**
+ * Музыка: в меню — одна, в бою — другая, по кругу и с плавным переходом.
+ * Браузеры не дают играть звук до первого действия пользователя — музыка ждёт касания или клавиши.
+ */
+class Music {
+  private readonly players = new Map<Track, HTMLAudioElement>();
+  private wanted: Track | null = null;
+  private playing: Track | null = null;
+  private unlocked = false;
+  private muted = store.muted;
+  /** Музыка — фон: около 27 % громкости, чтобы не спорить с ударами. */
+  private readonly volume = 0.27;
+  private fades = new Map<HTMLAudioElement, number>();
+
+  constructor() {
+    this.waitForGesture();
+    // Свернули вкладку — музыка ждёт, вернулись — продолжает.
+    document.addEventListener('visibilitychange', () => {
+      const el = this.playing ? this.players.get(this.playing) : null;
+      if (!el) return;
+      if (document.hidden) el.pause();
+      else if (!this.muted) void el.play().catch(() => {});
+    });
+  }
+
+  /** Ждём первого касания или клавиши — после этого браузер разрешает звук. */
+  private waitForGesture(): void {
+    this.unlocked = false;
+    const unlock = () => {
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('keydown', unlock);
+      this.unlocked = true;
+      this.sync();
+    };
+    window.addEventListener('pointerdown', unlock);
+    window.addEventListener('keydown', unlock);
+  }
+
+  private player(track: Track): HTMLAudioElement {
+    let el = this.players.get(track);
+    if (!el) {
+      el = new Audio(TRACKS[track]);
+      el.loop = true;
+      el.preload = 'auto';
+      el.volume = 0;
+      this.players.set(track, el);
+    }
+    return el;
+  }
+
+  private fade(el: HTMLAudioElement, to: number, ms: number, then?: () => void): void {
+    const prev = this.fades.get(el);
+    if (prev) cancelAnimationFrame(prev);
+    const from = el.volume;
+    const start = performance.now();
+    const step = (now: number) => {
+      const t = Math.min(1, (now - start) / ms);
+      el.volume = Math.max(0, Math.min(1, from + (to - from) * t));
+      if (t < 1) this.fades.set(el, requestAnimationFrame(step));
+      else {
+        this.fades.delete(el);
+        then?.();
+      }
+    };
+    this.fades.set(el, requestAnimationFrame(step));
+  }
+
+  /** Какая музыка должна звучать сейчас. */
+  play(track: Track): void {
+    this.wanted = track;
+    this.sync();
+  }
+
+  setMuted(muted: boolean): void {
+    this.muted = muted;
+    this.sync();
+  }
+
+  private sync(): void {
+    const target = this.muted || !this.unlocked ? null : this.wanted;
+    if (target === this.playing) return;
+    if (this.playing) {
+      const oldTrack = this.playing;
+      const old = this.player(oldTrack);
+      // Пауза — только если за время затухания этот трек снова не понадобился.
+      this.fade(old, 0, 600, () => this.playing !== oldTrack && old.pause());
+    }
+    this.playing = target;
+    if (!target) return;
+    const el = this.player(target);
+    if (el.paused) el.currentTime = 0;
+    void el.play().then(
+      () => this.fade(el, this.volume, 900),
+      () => {
+        // Воспроизведение не разрешили — попробуем после следующего действия пользователя.
+        if (this.playing === target) this.playing = null;
+        this.waitForGesture();
+      },
+    );
+  }
+}
+
+export const music = new Music();
 
 export const sfx = new Sfx();

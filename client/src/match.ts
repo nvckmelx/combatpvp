@@ -52,6 +52,8 @@ export function matchScreen(root: HTMLElement, session: MatchSession, nav: Match
   let disposed = false;
   let fightersKey = '';
 
+  sfx.preloadAnnouncer();
+
   // ---------- HUD сверху ----------
   const soundBtn = h('button', { class: 'icon-btn', 'aria-label': 'Звук', onclick: () => {
     sfx.toggle();
@@ -690,6 +692,7 @@ export function matchScreen(root: HTMLElement, session: MatchSession, nav: Match
     const key = `${v.boutId}:${v.roundNo}:${v.exchangeNo}`;
     if (v.phase === 'choose' && key !== exchangeKey) {
       exchangeKey = key;
+      if (v.exchangeNo === 1) sfx.roundStart();
       if (v.exchangeNo === 1 && v.roundNo === 1) showVersus(v);
       else if (v.exchangeNo === 1) showBanner(`РАУНД ${v.roundNo}`, 'clash big', 1100);
       sel = { step: null, strike: null, feint: null, feintMode: false, sealed: v.you.ready };
