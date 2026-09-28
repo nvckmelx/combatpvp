@@ -12,7 +12,7 @@ import {
   cleanName,
   defaultSettings,
 } from '@hj/shared';
-import { sfx } from './audio';
+import { music, sfx } from './audio';
 import { net } from './net';
 import { randomName } from './names';
 import { portrait } from './sprites';
@@ -109,36 +109,82 @@ function settingsFields(settings: BoutSettings): HTMLElement {
 }
 
 // ---------- Главное меню ----------
-export function menuScreen(root: HTMLElement, nav: Nav): void {
+/** Титульный экран показывается один раз за загрузку страницы — его нажатие заодно включает звук. */
+let titleSeen = false;
+
+const LOGO_ARC = `<svg class="logo-arc" viewBox="0 0 400 30" aria-hidden="true">
+  <defs><linearGradient id="arcFade" x1="0" x2="1"><stop offset="0" stop-color="#c1272d" stop-opacity="0"/><stop offset=".18" stop-color="#e0353b"/><stop offset=".82" stop-color="#e0353b"/><stop offset="1" stop-color="#c1272d" stop-opacity="0"/></linearGradient></defs>
+  <path d="M6 5 Q200 25 394 5" fill="none" stroke="url(#arcFade)" stroke-width="3.2" stroke-linecap="round"/>
+  <path d="M6 9 Q200 29 394 9" fill="none" stroke="#6e1414" stroke-width="1.4" stroke-opacity=".8"/>
+  <polygon points="186,12 214,12 200,28" fill="#d9d0c8" stroke="#c1272d" stroke-width="2" stroke-linejoin="round"/>
+</svg>`;
+
+// ---------- Главное меню и титульный экран ----------
+export function menuScreen(root: HTMLElement, nav: Nav): () => void {
   const features = [
     { icon: 'fist' as const, title: 'ЧИТАЙ ДРУГА', text: 'Два выбора за сход' },
     { icon: 'bolt' as const, title: 'БОЙ ЗА 5 МИНУТ', text: 'До двух побед' },
     { icon: 'link' as const, title: 'ПО ССЫЛКЕ', text: 'Без регистрации' },
     { icon: 'eye' as const, title: 'ДОСЬЕ', text: 'Твои привычки — наружу' },
   ];
-  root.append(
-    h(
-      'div',
-      { class: 'screen menu' },
-      h('div', { class: 'hero' },
-        h('img', { class: 'key-art', src: '/brand/key-art.webp', alt: '' }),
-        soundToggle(),
-        h('img', { class: 'wordmark', src: '/brand/wordmark.webp', alt: 'HUJARILOVO — Fight beyond limits' }),
-      ),
-      h('div', { class: 'menu-body' },
-        nameField(),
-        fighterPicker(),
-        h('div', { class: 'stack' },
-          h('button', { class: 'btn btn-primary btn-big', onclick: () => nav.create() }, 'СОЗДАТЬ БОЙ'),
-          h('button', { class: 'btn btn-big', onclick: () => nav.join() }, 'ВОЙТИ ПО КОДУ'),
-          h('button', { class: 'btn btn-big', onclick: () => nav.sparring() }, 'СПАРРИНГ С БОТОМ'),
-          h('button', { class: 'btn btn-ghost', onclick: () => nav.rules() }, 'КАК ИГРАТЬ'),
-        ),
-        h('div', { class: 'features' }, ...features.map((f) => h('div', { class: 'feature' }, icon(f.icon, 'icon feature-icon'), h('strong', null, f.title), h('span', null, f.text)))),
-        h('p', { class: 'tagline' }, 'MORE THAN A GAME · A FIGHTING LEGACY'),
-      ),
+  const embers = h('div', { class: 'embers', 'aria-hidden': 'true' },
+    ...Array.from({ length: 22 }, (_, i) =>
+      h('span', { style: { left: `${(i * 37) % 100}%`, animationDelay: `${(i * 0.73) % 6}s`, animationDuration: `${5 + ((i * 1.3) % 4)}s` } }),
     ),
   );
+  const press = h('button', { class: 'press-start' }, h('span', null, 'НАЖМИ, ЧТОБЫ ВОЙТИ В ЯМУ'));
+  const title = h('section', { class: 'title' },
+    h('div', { class: 'title-art' }),
+    embers,
+    h('div', { class: 'title-shade' }),
+    soundToggle(),
+    h('div', { class: 'logo-block' },
+      h('div', { class: 'logo-wrap' }, h('img', { class: 'logo', src: '/brand/logo.webp', alt: 'HUJARILOVO', draggable: 'false' })),
+      h('div', { class: 'logo-under', html: LOGO_ARC }),
+      h('p', { class: 'logo-tag' }, h('i'), 'FIGHT BEYOND LIMITS', h('i')),
+    ),
+    press,
+  );
+  const body = h('div', { class: 'menu-body' },
+    nameField(),
+    fighterPicker(),
+    h('div', { class: 'stack' },
+      h('button', { class: 'btn btn-primary btn-big', onclick: () => nav.create() }, 'СОЗДАТЬ БОЙ'),
+      h('button', { class: 'btn btn-big', onclick: () => nav.join() }, 'ВОЙТИ ПО КОДУ'),
+      h('button', { class: 'btn btn-big', onclick: () => nav.sparring() }, 'СПАРРИНГ С БОТОМ'),
+      h('button', { class: 'btn btn-ghost', onclick: () => nav.rules() }, 'КАК ИГРАТЬ'),
+    ),
+    h('div', { class: 'features' }, ...features.map((f) => h('div', { class: 'feature' }, icon(f.icon, 'icon feature-icon'), h('strong', null, f.title), h('span', null, f.text)))),
+    h('p', { class: 'tagline' }, 'MORE THAN A GAME · A FIGHTING LEGACY'),
+  );
+  const screen = h('div', { class: `screen menu${titleSeen ? ' entered' : ' gate'}` }, title, body);
+  root.append(screen);
+
+  const enter = () => {
+    if (titleSeen) return;
+    titleSeen = true;
+    // Прямо в обработчике нажатия — только так браузер разрешит музыку.
+    music.unlock();
+    music.play('menu');
+    sfx.enter();
+    screen.classList.remove('gate');
+    screen.classList.add('entered');
+    window.removeEventListener('keydown', onKey);
+  };
+  const onKey = (e: KeyboardEvent) => {
+    if (e.code === 'Enter' || e.code === 'Space') {
+      e.preventDefault();
+      enter();
+    }
+  };
+  if (!titleSeen) {
+    title.addEventListener('click', (e) => {
+      if ((e.target as HTMLElement).closest('.sound-toggle')) return;
+      enter();
+    });
+    window.addEventListener('keydown', onKey);
+  }
+  return () => window.removeEventListener('keydown', onKey);
 }
 
 // ---------- Создание боя ----------

@@ -125,6 +125,13 @@ class Sfx {
     void el.play().catch(() => {});
   }
 
+  /** Вход в Яму: глухой удар и гул. */
+  enter(): void {
+    this.tone(70, 1.1, 'sine', 0.55, 32);
+    this.tone(140, 0.5, 'triangle', 0.12, 60);
+    this.hit(4);
+  }
+
   win(): void {
     this.tone(196, 0.3, 'triangle', 0.14);
     this.tone(262, 0.3, 'triangle', 0.14, 262, 0.18);
@@ -153,6 +160,20 @@ class Music {
   private readonly volume = 0.27;
   private fades = new Map<HTMLAudioElement, number>();
 
+  /** На iOS громкость у <audio> не меняется — там звук идёт через WebAudio с регулятором. */
+  private readonly elementVolumeWorks = (() => {
+    try {
+      const probe = new Audio();
+      probe.volume = 0.5;
+      return Math.abs(probe.volume - 0.5) < 0.01;
+    } catch {
+      return false;
+    }
+  })();
+  private ctx: AudioContext | null = null;
+  private readonly gains = new Map<HTMLAudioElement, GainNode>();
+  private gestureBound = false;
+
   constructor() {
     this.waitForGesture();
     // Свернули вкладку — музыка ждёт, вернулись — продолжает.
@@ -164,17 +185,32 @@ class Music {
     });
   }
 
-  /** Ждём первого касания или клавиши — после этого браузер разрешает звук. */
+  /**
+   * Браузеры разрешают звук только в ответ на действие человека. На телефоне это отпускание пальца
+   * (pointerup / touchend / click), а не pointerdown, — поэтому слушаем всё сразу.
+   */
   private waitForGesture(): void {
     this.unlocked = false;
+    if (this.gestureBound) return;
+    this.gestureBound = true;
+    const events = ['pointerup', 'touchend', 'click', 'keydown'] as const;
     const unlock = () => {
-      window.removeEventListener('pointerdown', unlock);
-      window.removeEventListener('keydown', unlock);
-      this.unlocked = true;
-      this.sync();
+      events.forEach((e) => window.removeEventListener(e, unlock, true));
+      this.gestureBound = false;
+      this.unlock();
     };
-    window.addEventListener('pointerdown', unlock);
-    window.addEventListener('keydown', unlock);
+    events.forEach((e) => window.addEventListener(e, unlock, true));
+  }
+
+  /** Вызывается прямо из обработчика нажатия (например, «Нажми, чтобы начать»). */
+  unlock(): void {
+    this.unlocked = true;
+    if (this.ctx?.state === 'suspended') void this.ctx.resume();
+    this.sync();
+  }
+
+  get isUnlocked(): boolean {
+    return this.unlocked;
   }
 
   private player(track: Track): HTMLAudioElement {
@@ -183,20 +219,41 @@ class Music {
       el = new Audio(TRACKS[track]);
       el.loop = true;
       el.preload = 'auto';
-      el.volume = 0;
       this.players.set(track, el);
+      if (this.elementVolumeWorks) el.volume = 0;
+      else {
+        try {
+          this.ctx ??= new AudioContext();
+          const gain = this.ctx.createGain();
+          gain.gain.value = 0;
+          this.ctx.createMediaElementSource(el).connect(gain).connect(this.ctx.destination);
+          this.gains.set(el, gain);
+        } catch {
+          /* WebAudio нет — играем как есть */
+        }
+      }
     }
     return el;
+  }
+
+  private getVolume(el: HTMLAudioElement): number {
+    return this.gains.get(el)?.gain.value ?? el.volume;
+  }
+
+  private setVolume(el: HTMLAudioElement, value: number): void {
+    const gain = this.gains.get(el);
+    if (gain) gain.gain.value = value;
+    else el.volume = value;
   }
 
   private fade(el: HTMLAudioElement, to: number, ms: number, then?: () => void): void {
     const prev = this.fades.get(el);
     if (prev) cancelAnimationFrame(prev);
-    const from = el.volume;
+    const from = this.getVolume(el);
     const start = performance.now();
     const step = (now: number) => {
       const t = Math.min(1, (now - start) / ms);
-      el.volume = Math.max(0, Math.min(1, from + (to - from) * t));
+      this.setVolume(el, Math.max(0, Math.min(1, from + (to - from) * t)));
       if (t < 1) this.fades.set(el, requestAnimationFrame(step));
       else {
         this.fades.delete(el);
