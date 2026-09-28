@@ -17,7 +17,6 @@ import {
 import { music, sfx } from './audio';
 import { net } from './net';
 import { randomName } from './names';
-import { probe } from './assets';
 import { portrait } from './sprites';
 import { store } from './store';
 import { h, icon, toast } from './ui';
@@ -115,26 +114,10 @@ function settingsFields(settings: BoutSettings): HTMLElement {
 /** Титульный экран показывается один раз за загрузку страницы — его нажатие заодно включает звук. */
 let titleSeen = false;
 
-/** Золотая дуга под логотипом: рисуется кодом, чтобы не зависеть от вырезки логотипа. */
-const LOGO_ARC = `<svg class="logo-arc" viewBox="0 0 400 30" aria-hidden="true">
-  <defs><linearGradient id="arcFade" x1="0" x2="1"><stop offset="0" stop-color="#8a6424" stop-opacity="0"/><stop offset=".18" stop-color="#e2c27a"/><stop offset=".5" stop-color="#f6e3a8"/><stop offset=".82" stop-color="#e2c27a"/><stop offset="1" stop-color="#8a6424" stop-opacity="0"/></linearGradient></defs>
-  <path d="M6 5 Q200 25 394 5" fill="none" stroke="url(#arcFade)" stroke-width="2.6" stroke-linecap="round"/>
-  <path d="M6 9 Q200 29 394 9" fill="none" stroke="#5c421a" stroke-width="1.2" stroke-opacity=".9"/>
-  <polygon points="188,12 212,12 200,26" fill="#e9d08e" stroke="#5c421a" stroke-width="1.6" stroke-linejoin="round"/>
-</svg>`;
-
-/**
- * Арт главной. Пока файлов нет, берутся старые логотип и ключевой арт, перекрашенные фильтром в золото и сепию.
- * Исходники: art-source/brand/*.png → python3 tools/build_brand.py → client/public/brand/*.webp.
- */
-const HOME_ART = {
-  logo: '/brand/logo-gold.webp',
-  logoFallback: '/brand/logo.webp',
-  bgPortrait: '/brand/home-portrait.webp',
-  bgLandscape: '/brand/home-landscape.webp',
-};
-
 // ---------- Главное меню и титульный экран ----------
+/** Логотип главной (исходник — art-source/brand/logo-gold.png, сборка — tools/build_brand.py). */
+const LOGO_URL = '/brand/logo-gold.webp';
+
 export function menuScreen(root: HTMLElement, nav: Nav): () => void {
   // Только то, что правда про игру: без цифр, которые мы не можем подтвердить.
   const features = [
@@ -143,34 +126,14 @@ export function menuScreen(root: HTMLElement, nav: Nav): () => void {
     { icon: 'link' as const, title: 'ПО ССЫЛКЕ', text: 'Без регистрации' },
     { icon: 'eye' as const, title: 'ДОСЬЕ', text: 'Твои привычки — наружу' },
   ];
-  const dust = h('div', { class: 'dust', 'aria-hidden': 'true' },
-    ...Array.from({ length: 18 }, (_, i) =>
-      h('span', { style: { left: `${(i * 41) % 100}%`, animationDelay: `${(i * 0.83) % 7}s`, animationDuration: `${7 + ((i * 1.7) % 5)}s` } }),
-    ),
-  );
-  const logo = h('img', { class: 'logo', src: HOME_ART.logo, alt: 'HUJARILOVO', draggable: 'false' }) as HTMLImageElement;
-  const logoWrap = h('span', { class: 'logo-wrap' }, logo);
-  const setLogo = (url: string, fallback: boolean) => {
-    logoWrap.style.setProperty('--logo-url', `url('${url}')`);
-    logoWrap.classList.toggle('logo-fallback', fallback);
-  };
-  setLogo(HOME_ART.logo, false);
-  logo.onerror = () => {
-    logo.onerror = null;
-    logo.src = HOME_ART.logoFallback;
-    setLogo(HOME_ART.logoFallback, true);
-  };
-
+  const logo = h('img', { class: 'logo', src: LOGO_URL, alt: 'HUJARILOVO', width: '1360', height: '467', draggable: 'false', fetchpriority: 'high' });
   const press = h('button', { class: 'press-start' }, h('span', null, 'НАЖМИ, ЧТОБЫ ВОЙТИ В ЯМУ'));
   const title = h('section', { class: 'title' },
     h('div', { class: 'title-art' }),
-    h('div', { class: 'title-rays', 'aria-hidden': 'true' }),
-    dust,
     h('div', { class: 'title-shade' }),
     soundToggle(),
     h('h1', { class: 'logo-block' },
-      logoWrap,
-      h('span', { class: 'logo-under', html: LOGO_ARC }),
+      h('span', { class: 'logo-wrap' }, logo),
       h('span', { class: 'logo-tag' }, h('i'), 'FIGHT BEYOND LIMITS', h('i')),
     ),
     press,
@@ -190,16 +153,11 @@ export function menuScreen(root: HTMLElement, nav: Nav): () => void {
       h('button', { class: 'btn btn-ghost', onclick: () => nav.rules() }, 'КАК ИГРАТЬ'),
     ),
     h('section', { class: 'menu-profile', 'aria-label': 'Твой боец' }, nameField(), fighterPicker()),
-    h('div', { class: 'features' }, ...features.map((f) => h('div', { class: 'feature' }, icon(f.icon, 'icon feature-icon'), h('strong', null, f.title), h('span', null, f.text)))),
+    h('ul', { class: 'features' }, ...features.map((f) => h('li', { class: 'feature' }, icon(f.icon, 'icon feature-icon'), h('strong', null, f.title), h('span', null, f.text)))),
     h('p', { class: 'tagline' }, 'MORE THAN A GAME · A FIGHTING LEGACY'),
   );
   const screen = h('div', { class: `screen menu${titleSeen ? ' entered' : ' gate'}` }, title, body);
   root.append(screen);
-
-  // Кинофоны главной: подставляются, когда файлы есть; иначе остаётся тонированный ключевой арт.
-  for (const [url, cls] of [[HOME_ART.bgPortrait, 'has-bg-portrait'], [HOME_ART.bgLandscape, 'has-bg-landscape']] as const) {
-    void probe(url).then((ok) => ok && screen.classList.add(cls));
-  }
 
   /** После входа невидимая кнопка не должна ловить фокус; фокус — на главное действие. */
   const settle = (focus: boolean) => {

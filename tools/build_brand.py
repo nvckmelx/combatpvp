@@ -3,31 +3,35 @@
 Арт главной HUJARILOVO: art-source/brand/*.png  →  client/public/brand/*.webp
 
 - logo-gold.png      → logo-gold.webp: прозрачный логотип, обрезка пустых полей (+3 % воздуха),
-                        ширина не больше 1600 px, альфа сохраняется.
-- home-portrait.png  → home-portrait.webp: фон для телефона, 1080×1920 (кадрирование по центру).
-- home-landscape.png → home-landscape.webp: фон для компьютера, 1920×1080.
+                        ширина не больше 1360 px, альфа сохраняется.
+- hero-cinematic-mobile.png  → hero-mobile.webp: кинофон для телефона (не больше 1920 px по высоте).
+- hero-cinematic-desktop.png → hero-desktop.webp: кинофон для компьютера (не больше 1920 px по ширине).
 
-Пока какого-то файла нет, главная показывает временную замену (старый логотип и арт, тонированные в золото).
+Фоны только сжимаются и никогда не растягиваются; кадрирует их CSS (background-size: cover).
 Запуск: python3 tools/build_brand.py [папка-исходников]   (нужен Pillow)
 """
 import sys
 from pathlib import Path
 
-from PIL import Image, ImageOps
+from PIL import Image
 
 ROOT = Path(__file__).resolve().parent.parent
 SRC = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / 'art-source' / 'brand'
 OUT = ROOT / 'client' / 'public' / 'brand'
 
-LOGO_MAX_W = 1600
+LOGO_MAX_W = 1360  # на экране логотип не шире 680 px — хватает и для двойной плотности
 ALPHA_CUT = 16  # альфа ниже — ореол генератора, в габарит логотипа не считаем
-BACKGROUNDS = {'home-portrait': (1080, 1920), 'home-landscape': (1920, 1080)}
+# исходник → (результат, наибольшая ширина, наибольшая высота)
+BACKGROUNDS = {
+    'hero-cinematic-mobile': ('hero-mobile', 1080, 1920),
+    'hero-cinematic-desktop': ('hero-desktop', 1920, 1080),
+}
 
 
 def build_logo() -> str:
     src = SRC / 'logo-gold.png'
     if not src.exists():
-        return f'  нет файла: {src.name} — остаётся временный логотип'
+        return f'  нет файла: {src.name}'
     img = Image.open(src)
     if 'A' not in img.getbands():
         return f'  {src.name}: нет альфа-канала — нужен PNG с прозрачным фоном'
@@ -41,27 +45,26 @@ def build_logo() -> str:
     if img.width > LOGO_MAX_W:
         img = img.resize((LOGO_MAX_W, round(img.height * LOGO_MAX_W / img.width)), Image.LANCZOS)
     out = OUT / 'logo-gold.webp'
-    img.save(out, 'WEBP', quality=90, alpha_quality=95, method=6)
+    img.save(out, 'WEBP', quality=84, alpha_quality=90, method=6)
     return f'  {out.relative_to(ROOT)}  {img.width}×{img.height}  {out.stat().st_size // 1024} КБ'
 
 
-def build_background(name: str, size: tuple[int, int]) -> str:
-    src = SRC / f'{name}.png'
+def build_background(src_name: str, out_name: str, max_w: int, max_h: int) -> str:
+    src = SRC / f'{src_name}.png'
     if not src.exists():
-        return f'  нет файла: {src.name} — остаётся временный фон'
+        return f'  нет файла: {src.name}'
     img = Image.open(src).convert('RGB')
-    note = ''
-    if img.width < size[0] or img.height < size[1]:
-        note = f' (исходник {img.width}×{img.height} меньше нужного — будет растянут)'
-    img = ImageOps.fit(img, size, Image.LANCZOS, centering=(0.5, 0.5))
-    out = OUT / f'{name}.webp'
-    img.save(out, 'WEBP', quality=80, method=6)
-    return f'  {out.relative_to(ROOT)}  {size[0]}×{size[1]}  {out.stat().st_size // 1024} КБ{note}'
+    scale = min(1.0, max_w / img.width, max_h / img.height)
+    if scale < 1:
+        img = img.resize((round(img.width * scale), round(img.height * scale)), Image.LANCZOS)
+    out = OUT / f'{out_name}.webp'
+    img.save(out, 'WEBP', quality=82, method=6)
+    return f'  {out.relative_to(ROOT)}  {img.width}×{img.height}  {out.stat().st_size // 1024} КБ'
 
 
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
-    lines = [build_logo()] + [build_background(n, s) for n, s in BACKGROUNDS.items()]
+    lines = [build_logo()] + [build_background(src, *dst) for src, dst in BACKGROUNDS.items()]
     print('\n'.join(lines))
 
 

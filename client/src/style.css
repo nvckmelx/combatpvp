@@ -309,45 +309,46 @@ h4 {
 }
 
 /* ---------- Главная: чёрное кино и состаренное золото ----------
-   Цвета главной переопределены здесь: общие компоненты (поле имени, выбор бойца, кнопки, фокус)
-   берут --blood*, поэтому внутри .menu эти токены указывают на золото. Красного на главной нет. */
+   Палитра — art-source/meta/brand-black-gold-v2/DESIGN.md: золото — акцент, почти вся площадь чёрная.
+   Токены на .screen.menu переопределяют --blood*, поэтому общие компоненты (поле имени, выбор бойца,
+   кнопки, фокус) на главной сами становятся золотыми. Красного на главной нет. */
 .screen.menu {
-  --coal: #060606;
-  --graphite: #111113;
-  --graphite-2: #19191c;
-  --line: #2c2822;
-  --steel: #ebe4d6;
-  --steel-dim: #8f877a;
-  --ash: #9c958a;
-  --gold: #c8a45a;
-  --gold-hi: #f1dc9c;
-  --gold-mid: #dcbb70;
-  --gold-deep: #8a6424;
-  --gold-dark: #3b2a0e;
+  --coal: #070809;
+  --graphite: #111315;
+  --graphite-2: #202225;
+  --line: #2a2926;
+  --steel: #eae6dc;
+  --steel-dim: #8f8a80;
+  --ash: #a39d92;
+  --gold: #c9a66b;
+  --gold-hi: #f2d99b;
+  --gold-mid: #dcc085;
+  --gold-deep: #8f6c35;
   --blood: var(--gold);
   --blood-hi: var(--gold-hi);
   --blood-dark: var(--gold-deep);
   --heat: var(--gold-hi);
   max-width: none;
   color: var(--steel);
-  background:
-    radial-gradient(ellipse 70% 40% at 50% 0%, rgba(200, 164, 90, 0.07), transparent 70%),
-    radial-gradient(ellipse 90% 60% at 50% 110%, rgba(26, 24, 20, 0.9), transparent 70%),
-    var(--coal);
+  background: var(--coal);
 }
 
 .menu :focus-visible {
   outline: 2px solid var(--gold-hi);
   outline-offset: 3px;
-  box-shadow: 0 0 0 6px rgba(6, 6, 6, 0.85);
+  box-shadow: 0 0 0 6px rgba(7, 8, 9, 0.85);
 }
 
+/* Касание — не меньше 44 px. */
 .menu .icon-btn {
-  border-color: rgba(200, 164, 90, 0.28);
+  width: 44px;
+  height: 44px;
+  border-color: rgba(201, 166, 107, 0.28);
+  background: rgba(7, 8, 9, 0.6);
   color: var(--gold-hi);
 }
 
-/* Титул: фон, лучи света, пыль, логотип. */
+/* Титул: кинофон, логотип, девиз. */
 .title {
   position: relative;
   display: flex;
@@ -365,72 +366,37 @@ h4 {
   cursor: pointer;
 }
 
-/* Запасной фон — ключевой арт без красного: обесцвечен и чуть тонирован в тёплую сепию. */
-.title-art {
-  position: absolute;
-  inset: -4%;
-  background: url('/brand/key-art.webp') center 32% / cover no-repeat;
-  filter: grayscale(1) sepia(0.35) brightness(0.5) contrast(1.15);
-  animation: kenburns 30s ease-in-out infinite alternate;
+/* Фон выбирается медиазапросом: браузер скачивает только один из двух файлов. */
+.title-art,
+.title::before {
+  background: url('/brand/hero-mobile.webp') center 20% / cover no-repeat;
 }
 
+@media (min-aspect-ratio: 1/1) {
+  .title-art,
+  .title::before {
+    background-image: url('/brand/hero-desktop.webp');
+    background-position: center 40%;
+  }
+}
+
+.title-art {
+  position: absolute;
+  inset: -3%;
+  animation: kenburns 34s ease-in-out infinite alternate;
+}
+
+/* Размытая подложка из того же кадра — заполняет края на очень широких и высоких экранах. */
 .title::before {
   content: '';
   position: absolute;
   inset: -10%;
-  background: url('/brand/key-art.webp') center 30% / cover no-repeat;
-  filter: blur(24px) grayscale(1) brightness(0.28);
-}
-
-/* Настоящие кинофоны, когда они есть. */
-.menu.has-bg-portrait .title-art,
-.menu.has-bg-portrait .title::before {
-  background-image: url('/brand/home-portrait.webp');
-  filter: none;
-}
-
-.menu.has-bg-portrait .title::before {
   filter: blur(24px) brightness(0.35);
-}
-
-@media (min-aspect-ratio: 1/1) {
-  .menu.has-bg-landscape .title-art,
-  .menu.has-bg-landscape .title::before {
-    background-image: url('/brand/home-landscape.webp');
-    filter: none;
-  }
-
-  .menu.has-bg-landscape .title::before {
-    filter: blur(24px) brightness(0.35);
-  }
 }
 
 @keyframes kenburns {
   to {
-    transform: scale(1.07) translateY(-1.5%);
-  }
-}
-
-/* Объёмный свет: тёплые лучи сверху, медленно дышат. */
-.title-rays {
-  position: absolute;
-  inset: -20% -10% 20%;
-  pointer-events: none;
-  background:
-    conic-gradient(from 180deg at 50% -8%, transparent 0deg 158deg, rgba(241, 220, 156, 0.13) 166deg, transparent 172deg 176deg, rgba(241, 220, 156, 0.09) 181deg, transparent 188deg 192deg, rgba(241, 220, 156, 0.11) 196deg, transparent 204deg 360deg);
-  filter: blur(6px);
-  mix-blend-mode: screen;
-  animation: rays 9s ease-in-out infinite alternate;
-}
-
-@keyframes rays {
-  from {
-    opacity: 0.55;
-    transform: rotate(-1.5deg);
-  }
-  to {
-    opacity: 1;
-    transform: rotate(1.5deg);
+    transform: scale(1.05) translateY(-1%);
   }
 }
 
@@ -438,50 +404,8 @@ h4 {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(ellipse 85% 65% at 50% 36%, transparent 28%, rgba(6, 6, 6, 0.65) 80%),
-    linear-gradient(180deg, rgba(6, 6, 6, 0.45) 0%, transparent 24%, rgba(6, 6, 6, 0.55) 62%, var(--coal) 100%);
-}
-
-/* Пыль в луче света. */
-.dust {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-}
-
-.dust span {
-  position: absolute;
-  bottom: -10px;
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
-  background: var(--gold-hi);
-  box-shadow: 0 0 6px 1px rgba(241, 220, 156, 0.55);
-  opacity: 0;
-  animation-name: mote;
-  animation-timing-function: linear;
-  animation-iteration-count: infinite;
-}
-
-.dust span:nth-child(3n) {
-  width: 2px;
-  height: 2px;
-  background: var(--gold);
-}
-
-@keyframes mote {
-  0% {
-    transform: translate(0, 0);
-    opacity: 0;
-  }
-  15% {
-    opacity: 0.7;
-  }
-  100% {
-    transform: translate(-26px, -80vh);
-    opacity: 0;
-  }
+    radial-gradient(ellipse 80% 60% at 50% 40%, transparent 35%, rgba(7, 8, 9, 0.55) 85%),
+    linear-gradient(180deg, rgba(7, 8, 9, 0.35) 0%, transparent 22%, rgba(7, 8, 9, 0.5) 64%, var(--coal) 100%);
 }
 
 .logo-block {
@@ -490,7 +414,7 @@ h4 {
   display: flex;
   flex-direction: column;
   align-items: center;
-  width: min(92%, 680px);
+  width: min(90%, 680px);
   margin: 0;
   padding-bottom: 22px;
   font-size: inherit;
@@ -508,12 +432,12 @@ h4 {
 @keyframes logo-in {
   0% {
     opacity: 0;
-    transform: scale(1.3);
-    filter: blur(10px) brightness(2);
+    transform: scale(1.2);
+    filter: blur(8px) brightness(1.6);
   }
-  55% {
+  60% {
     opacity: 1;
-    filter: blur(0) brightness(1.4);
+    filter: blur(0) brightness(1.15);
   }
   100% {
     transform: none;
@@ -524,7 +448,7 @@ h4 {
   position: relative;
   display: block;
   width: 100%;
-  filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.95)) drop-shadow(0 0 30px rgba(200, 164, 90, 0.22));
+  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.9));
 }
 
 .logo {
@@ -535,53 +459,14 @@ h4 {
   -webkit-user-drag: none;
 }
 
-/* Временный логотип (старый, стальной) — тонируется в состаренное золото, пока нет нового файла. */
-.logo-fallback .logo {
-  filter: grayscale(1) sepia(1) saturate(1.9) hue-rotate(-6deg) brightness(1.08) contrast(1.1);
-}
-
-/* Блик, пробегающий по металлу букв. */
-.logo-wrap::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  -webkit-mask: var(--logo-url) center / 100% 100% no-repeat;
-  mask: var(--logo-url) center / 100% 100% no-repeat;
-  background: linear-gradient(105deg, transparent 40%, rgba(255, 244, 214, 0.55) 50%, transparent 60%) -160% 0 / 55% 100% no-repeat;
-  mix-blend-mode: screen;
-  animation: sheen 7s ease-in-out 1.6s infinite;
-}
-
-@keyframes sheen {
-  0% {
-    background-position: -160% 0;
-  }
-  30%,
-  100% {
-    background-position: 260% 0;
-  }
-}
-
-.logo-under {
-  display: block;
-  width: 86%;
-  margin-top: -2px;
-}
-
-.logo-arc {
-  display: block;
-  width: 100%;
-  height: auto;
-}
-
 .logo-tag {
   display: flex;
   align-items: center;
   gap: 14px;
-  margin: 10px 0 0;
+  margin: 12px 0 0;
   font-family: var(--display);
   font-weight: 400;
-  font-size: clamp(11px, 2.9vw, 16px);
+  font-size: clamp(11px, 2.8vw, 15px);
   letter-spacing: 0.46em;
   color: var(--gold-mid);
   white-space: nowrap;
@@ -589,7 +474,7 @@ h4 {
 }
 
 .logo-tag i {
-  width: clamp(26px, 10vw, 90px);
+  width: clamp(24px, 9vw, 80px);
   height: 1px;
   background: linear-gradient(90deg, transparent, var(--gold));
 }
@@ -604,6 +489,7 @@ h4 {
   left: 50%;
   bottom: max(9vh, 56px);
   transform: translateX(-50%);
+  min-height: 44px;
   padding: 14px 10px;
   border: 0;
   background: none;
@@ -612,16 +498,16 @@ h4 {
   font-size: clamp(13px, 3.8vw, 17px);
   letter-spacing: 0.3em;
   color: var(--gold-hi);
-  text-shadow: 0 2px 0 #000, 0 0 18px rgba(200, 164, 90, 0.55);
+  text-shadow: 0 2px 0 #000;
   white-space: nowrap;
-  animation: blink 1.9s ease-in-out infinite;
+  animation: blink 2.2s ease-in-out infinite;
   transition: opacity 0.3s;
 }
 
 .press-start span {
   padding: 9px 6px;
-  border-top: 1px solid rgba(200, 164, 90, 0.55);
-  border-bottom: 1px solid rgba(200, 164, 90, 0.55);
+  border-top: 1px solid rgba(201, 166, 107, 0.5);
+  border-bottom: 1px solid rgba(201, 166, 107, 0.5);
 }
 
 .menu.entered .press-start {
@@ -632,7 +518,7 @@ h4 {
 
 @keyframes blink {
   50% {
-    opacity: 0.4;
+    opacity: 0.45;
   }
 }
 
@@ -643,8 +529,8 @@ h4 {
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 26px;
-  padding: 6px var(--gutter) 36px;
+  gap: 28px;
+  padding: 6px var(--gutter) 40px;
 }
 
 .menu.gate .menu-body {
@@ -658,7 +544,7 @@ h4 {
 @keyframes rise {
   from {
     opacity: 0;
-    transform: translateY(36px);
+    transform: translateY(28px);
   }
 }
 
@@ -674,22 +560,22 @@ h4 {
 
 /* Главная кнопка: литое состаренное золото, тёмные буквы. */
 .menu .btn-primary {
-  border: 1px solid #f5e2a6;
+  border: 1px solid #f6e4b0;
   background:
-    linear-gradient(180deg, rgba(255, 250, 230, 0.35), transparent 38%),
-    linear-gradient(180deg, #ecd28b 0%, #c9a255 46%, #9c7432 100%);
-  color: #1b1307;
-  text-shadow: 0 1px 0 rgba(255, 240, 200, 0.45);
+    linear-gradient(180deg, rgba(255, 250, 232, 0.3), transparent 40%),
+    linear-gradient(180deg, #f2d99b 0%, #c9a66b 48%, #8f6c35 100%);
+  color: #17110a;
+  text-shadow: 0 1px 0 rgba(255, 240, 205, 0.4);
   box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.7),
-    0 1px 0 rgba(255, 245, 215, 0.6) inset,
-    0 -2px 0 rgba(70, 48, 14, 0.55) inset,
-    0 10px 30px rgba(200, 164, 90, 0.22);
+    0 0 0 1px rgba(0, 0, 0, 0.75),
+    0 1px 0 rgba(255, 246, 220, 0.55) inset,
+    0 -2px 0 rgba(70, 50, 20, 0.5) inset,
+    0 8px 22px rgba(0, 0, 0, 0.6);
 }
 
 .menu .btn-primary:hover:not(:disabled) {
-  border-color: #fff1c4;
-  filter: brightness(1.06);
+  border-color: #fff3cf;
+  filter: brightness(1.05);
 }
 
 .btn-hero {
@@ -725,7 +611,7 @@ h4 {
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: none;
-  opacity: 0.78;
+  opacity: 0.8;
 }
 
 .menu-secondary {
@@ -739,8 +625,8 @@ h4 {
   padding: 0 10px;
   font-size: 15px;
   letter-spacing: 0.1em;
-  border-color: rgba(200, 164, 90, 0.3);
-  background: linear-gradient(180deg, #1b1a1c, #111113);
+  border-color: rgba(201, 166, 107, 0.3);
+  background: linear-gradient(180deg, #1a1b1e, var(--graphite));
   color: var(--steel);
 }
 
@@ -760,7 +646,7 @@ h4 {
   display: flex;
   flex-direction: column;
   gap: 18px;
-  padding-top: 20px;
+  padding-top: 22px;
   border-top: 1px solid var(--line);
 }
 
@@ -768,29 +654,30 @@ h4 {
   color: var(--gold-mid);
 }
 
+/* Особенности — сдержанный список без карточек. */
 .menu .features {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  gap: 18px 16px;
+  margin: 0;
+  padding: 22px 0 0;
+  border-top: 1px solid var(--line);
+  list-style: none;
 }
 
 .menu .feature {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  padding: 16px 8px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: linear-gradient(180deg, rgba(25, 25, 28, 0.8), rgba(14, 14, 16, 0.8));
-  text-align: center;
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  column-gap: 10px;
+  align-items: start;
 }
 
 .menu .feature-icon {
-  width: 28px;
-  height: 28px;
+  grid-row: span 2;
+  width: 22px;
+  height: 22px;
+  margin-top: 1px;
   color: var(--gold);
-  margin-bottom: 4px;
 }
 
 .menu .feature strong {
@@ -798,12 +685,13 @@ h4 {
   font-weight: 500;
   letter-spacing: 0.14em;
   font-size: 13px;
+  color: var(--steel);
 }
 
 .menu .feature span {
   color: var(--ash);
   font-size: 12px;
-  line-height: 1.3;
+  line-height: 1.35;
 }
 
 .menu .tagline {
@@ -812,13 +700,14 @@ h4 {
   font-family: var(--display);
   font-weight: 300;
   letter-spacing: 0.35em;
-  font-size: 12px;
-  color: var(--gold-deep);
+  font-size: 11px;
+  color: #a07d45; /* контраст 5.3 на чёрном — мелкий текст должен читаться */
 }
 
-/* Очень узкий телефон: вторичные кнопки друг под другом. */
+/* Очень узкий телефон: вторичные кнопки и особенности — в одну колонку. */
 @media (max-width: 350px) {
-  .menu-secondary {
+  .menu-secondary,
+  .menu .features {
     grid-template-columns: 1fr;
   }
 
@@ -827,18 +716,10 @@ h4 {
   }
 }
 
-/* Телефон вертикально: на титуле арт идёт полосой сверху. */
+/* Телефон вертикально: логотип выше, «Нажми» — ближе к центру низа. */
 @media (max-aspect-ratio: 1/1) {
-  .menu.gate:not(.has-bg-portrait) .title-art {
-    inset: 0;
-    background-size: auto 46%;
-    background-position: center 10%;
-    -webkit-mask-image: linear-gradient(180deg, transparent 5%, #000 14%, #000 33%, transparent 50%);
-    mask-image: linear-gradient(180deg, transparent 5%, #000 14%, #000 33%, transparent 50%);
-  }
-
   .menu.gate .logo-block {
-    transform: translateY(-22vh);
+    transform: translateY(-20vh);
   }
 
   .menu.gate .press-start {
@@ -846,16 +727,32 @@ h4 {
   }
 }
 
-/* Без движения: ни пыли, ни лучей, ни наезда камеры — только статичный кадр. */
-@media (prefers-reduced-motion: reduce) {
-  .menu .dust,
-  .menu .logo-wrap::after {
-    display: none;
+/* Телефон горизонтально: титул ниже, чтобы кнопки были видны сразу. */
+@media (max-height: 500px) and (min-aspect-ratio: 1/1) {
+  .title {
+    height: 62vh;
+    min-height: 0;
   }
 
+  .logo-block {
+    width: min(46%, 420px);
+    padding-bottom: 10px;
+  }
+
+  .menu.gate .logo-block {
+    transform: translateY(-10vh);
+  }
+
+  .menu.gate .press-start {
+    bottom: 8vh;
+  }
+}
+
+/* Без движения: ни наезда камеры, ни мигания — только статичный кадр. */
+@media (prefers-reduced-motion: reduce) {
   .menu .title-art,
-  .menu .title-rays,
-  .menu .press-start {
+  .menu .press-start,
+  .menu.gate .logo-wrap {
     animation: none;
   }
 }
