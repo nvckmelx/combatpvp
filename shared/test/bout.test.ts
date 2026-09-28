@@ -4,6 +4,7 @@ import { autoChoice, newBout, playExchange, sanitizeSettings, startNextRound } f
 import { BOTS, botChoose } from '../src/bots';
 import { findHabits, sideStats } from '../src/dossier';
 import { BoutHost, Scheduler } from '../src/host';
+import { FIGHTERS, cleanFighter, otherFighter } from '../src/fighters';
 import { createRng } from '../src/rng';
 import { BoutState, Choice, Lane, Pair, Side, isLane } from '../src/types';
 
@@ -221,6 +222,35 @@ describe('ведущий боя', () => {
     expect(host.view(1).opp.fighter).toBe('lysy');
     const byDefault = new BoutHost({ settings: { winsNeeded: 2, timerSec: 8 }, names: ['А', 'Б'], scheduler, onChange: () => {} });
     expect(byDefault.view(1).you.fighter).toBe('lysy');
+  });
+
+  it('Таксолог — полноправный боец: проходит проверку и дерётся с теми же числами', () => {
+    expect(FIGHTERS.map((f) => f.id)).toEqual(['borodach', 'lysy', 'taksolog']);
+    expect(cleanFighter('taksolog')).toBe('taksolog');
+    expect(cleanFighter('Taksolog')).toBe('borodach');
+    expect(cleanFighter('<script>')).toBe('borodach');
+    expect(otherFighter('taksolog')).not.toBe('taksolog');
+    // Одинаковые ходы — одинаковый бой, кто бы ни дрался.
+    const play = (fighters: Pair<'borodach' | 'lysy' | 'taksolog'>) => {
+      const { scheduler, advance } = fakeScheduler();
+      const host = new BoutHost({ settings: { winsNeeded: 2, timerSec: 8 }, names: ['А', 'Б'], fighters, seed: 7, scheduler, onChange: () => {} });
+      const moves: Pair<Choice>[] = [
+        [{ step: 1, strike: 1, feint: null }, { step: 0, strike: 1, feint: null }],
+        [{ step: 1, strike: 0, feint: null }, { step: 0, strike: 2, feint: null }],
+        [{ step: 2, strike: 0, feint: null }, { step: 1, strike: 1, feint: null }],
+      ];
+      for (const [a, b] of moves) {
+        expect(host.submit(0, a)).toBeNull();
+        expect(host.submit(1, b)).toBeNull();
+        for (let i = 0; i < 100 && host.currentPhase !== 'choose'; i++) advance(100);
+      }
+      return host.state.history;
+    };
+    const base = play(['borodach', 'lysy']);
+    expect(play(['taksolog', 'lysy'])).toEqual(base);
+    expect(play(['borodach', 'taksolog'])).toEqual(base);
+    expect(play(['taksolog', 'taksolog'])).toEqual(base);
+    expect(base.length).toBe(3);
   });
 
   it('прячет Ленту соперника в Тумане', () => {

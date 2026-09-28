@@ -41,7 +41,7 @@
 - **Нокаут:** замедление, чёрно-белый кадр, падающий боец, штамп «НОКАУТ».
 - **Начало боя:** экран VS: портреты въезжают с двух сторон, «РАУНД 1», «БОЙ!».
 
-**Выбор бойца** в лобби (Бородач или Лысый) — только внешний вид, на числа не влияет. Можно выбрать одного и того же: у соперника будет стальной оттенок.
+**Выбор бойца** в лобби (Бородач, Лысый или Таксолог) — только внешний вид, на числа не влияет. Можно выбрать одного и того же: у соперника будет стальной оттенок.
 
 Все надписи (урон, «НОКАУТ», «РАУНД 1», плашки) рисуются кодом шрифтом Oswald — **на картинках не должно быть текста.**
 
@@ -69,7 +69,7 @@
 
 ## 4. Список ассетов
 
-Имена файлов — ровно такие: так я подключу их без переименований. `{id}` — `borodach` или `lysy`.
+Имена файлов — ровно такие: так я подключу их без переименований. `{id}` — `borodach`, `lysy` или `taksolog`.
 
 ### 4.1 Обязательно (MVP) — 39 файлов
 
@@ -156,6 +156,15 @@ Character: a heavy muscular bald fighter in his forties, shaved head, short stub
 dark tribal-style tattoos on shoulders and forearms, bare torso,
 dark fight shorts with a dark red belt, black fingerless fight gloves, bare feet.
 ```
+
+**Таксолог** (`taksolog`) — единственный одетый боец, силуэт должен читаться иначе, чем у двух голых торсов:
+```
+Character: a lean wiry adult man, slim build, dark hair in a blunt bowl cut with straight bangs down to the eyebrows,
+a black plaid (checked) flannel jacket worn open over a plain black t-shirt, sleeves down to the wrists,
+olive-green cargo trousers with side pockets, grey-and-white sneakers, bare fists with light worn tape on the knuckles.
+Street-fighter look, not a pro athlete: tense shoulders, sharp focused eyes.
+```
+Для вида сзади добавь: `We see the black plaid jacket on his back and the back of the bowl-cut head.` — чтобы генератор не нарисовал голую спину.
 
 ### 5.1 Лист персонажа (`sheet.png`, 1536×1024)
 
@@ -244,5 +253,5 @@ left half deep blood red, right half dark steel grey, grunge brush texture, spar
 
 - Присылай картинки прямо в чат с Claude пачками по бойцу, или загрузи в репозиторий в папку `art-source/` (через «Add file → Upload files» на GitHub) с путями и именами из раздела 4.
 - Я прогоню их скриптом: обрезка по фигуре, выравнивание масштаба и линии ступней, удаление зелёного фона (если был), уменьшение и сжатие в WebP для браузера. Оригиналы в игру не идут.
-- **Сделано:** полный комплект (46 PNG) получен и подключён. Исходники лежат в `art-source/` (в git не хранятся), команда `python3 tools/build_art.py` делает из них WebP в `client/public/art/`: общий масштаб на бойца и ракурс по стойке `idle`, ступни на одной линии, срез ореола с альфой < 32, холст бойцов 640×960. Если какой-то файл пропадёт, на его месте снова появится временный силуэт.
+- **Сделано:** полный комплект (46 PNG) получен и подключён. Таксолог — ещё 17 PNG (15 поз, лист, портрет), подключён отдельно; его `prompts.json`, `validation.json` и README лежат в `art-source/meta/taksolog/`, чтобы не смешивать с метаданными первых 46 файлов. Всего 63 PNG → 60 WebP. Исходники лежат в `art-source/` (в git не хранятся), команда `python3 tools/build_art.py` делает из них WebP в `client/public/art/`: общий масштаб на бойца и ракурс по стойке `idle`, ступни на одной линии, срез ореола с альфой < 32, холст бойцов 640×960. Если какой-то файл пропадёт, на его месте снова появится временный силуэт.
 - **Где что используется:** все позы бойцов; `front_taunt` — когда соперник отправляет фразу; портреты — в HUD, меню и на экране VS; `arena/pit_*` — фон Ямы; `crack_1…3` — трещины на плитах; `crowd` — толпа поднимается с Накалом; `vfx/impact` и `sweat` — попадание; `whoosh` — промах; `dust` — Рывок; `crush_splash` — Сокрушение; `ui/vs_bg` — экран VS перед боем. `sheet.png` — только эталон.

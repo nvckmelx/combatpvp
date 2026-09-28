@@ -1,5 +1,5 @@
 /** Бойцы — только внешний вид: на числа боя не влияют. */
-export type FighterId = 'borodach' | 'lysy';
+export type FighterId = 'borodach' | 'lysy' | 'taksolog';
 
 export interface FighterInfo {
   id: FighterId;
@@ -10,6 +10,7 @@ export interface FighterInfo {
 export const FIGHTERS: readonly FighterInfo[] = [
   { id: 'borodach', name: 'Бородач', tagline: 'Узел на макушке, борода, красный пояс' },
   { id: 'lysy', name: 'Лысый', tagline: 'Бритая голова, татуировки, чёрные перчатки' },
+  { id: 'taksolog', name: 'Таксолог', tagline: 'Стрижка горшком, клетчатая куртка, карго' },
 ];
 
 export const DEFAULT_FIGHTER: FighterId = 'borodach';

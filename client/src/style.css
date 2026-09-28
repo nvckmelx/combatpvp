@@ -747,27 +747,27 @@ h4 {
 
 .fighters {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 8px;
 }
 
+/* Три бойца: портрет сверху, имя и приметы под ним. */
 .fighter-card {
-  display: grid;
-  grid-template-columns: 44px 1fr;
-  grid-template-rows: auto auto;
-  column-gap: 10px;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  padding: 8px 10px;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px 6px 9px;
+  text-align: center;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--graphite);
-  text-align: left;
 }
 
 .fighter-card .portrait {
-  grid-row: span 2;
-  width: 44px;
-  height: 44px;
+  width: 52px;
+  height: 52px;
   border-color: var(--line);
 }
 
@@ -1667,6 +1667,36 @@ h4 {
 
 .ph .ph-spine {
   stroke: rgba(0, 0, 0, 0.45);
+  stroke-width: 1.2;
+}
+
+/* Таксолог: оливковые карго, светлые кроссовки, чёрная клетчатая куртка. */
+.ph-taksolog .ph-pants {
+  stroke: color-mix(in srgb, var(--pants) 55%, #4b5130);
+}
+
+.ph-taksolog .ph-foot {
+  fill: #bdbab4;
+}
+
+.ph .ph-jacket {
+  fill: color-mix(in srgb, var(--skin) 45%, #0c0c0d);
+  stroke: var(--skin-rim);
+  stroke-width: 1;
+  stroke-linejoin: round;
+}
+
+.ph .ph-sleeve {
+  stroke: color-mix(in srgb, var(--skin) 45%, #0c0c0d);
+}
+
+.ph .ph-tee {
+  fill: #050506;
+}
+
+.ph .ph-plaid {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.12);
   stroke-width: 1.2;
 }
 

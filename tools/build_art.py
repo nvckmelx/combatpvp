@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parent.parent
 SRC = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / 'art-source'
 OUT = ROOT / 'client' / 'public' / 'art'
 
-FIGHTERS = ['borodach', 'lysy']
+FIGHTERS = ['borodach', 'lysy', 'taksolog']
 FRONT = ['idle', 'slip', 'hook', 'straight', 'hit_side', 'hit_center', 'ko', 'victory', 'taunt']
 BACK = ['idle', 'slip', 'hook', 'straight', 'hit', 'ko']
 
@@ -30,8 +30,7 @@ SOLID = 128  # альфа выше — «тело» фигуры для заме
 
 # Прочие файлы: путь → (ширина, высота) результата; None — сохранить пропорции по ширине.
 OTHER = {
-    'portraits/borodach.png': (512, 512),
-    'portraits/lysy.png': (512, 512),
+    **{f'portraits/{fid}.png': (512, 512) for fid in FIGHTERS},
     'arena/pit_portrait.png': (1024, 1536),
     'arena/pit_landscape.png': (1536, 1024),
     'arena/crack_1.png': (512, 512),
@@ -64,6 +63,9 @@ def save_webp(img: Image.Image, path: Path, quality=82) -> None:
 def build_fighter(fid: str, view: str, poses: list[str]) -> list[str]:
     report = []
     ref_path = SRC / 'fighters' / fid / f'{view}_idle.png'
+    if not ref_path.exists():
+        # Без эталонной стойки масштаб не посчитать — бойца пропускаем, в игре останется временный силуэт.
+        return [f'  нет файла: {ref_path.relative_to(SRC)} — ракурс {fid}/{view} пропущен']
     ref = Image.open(ref_path).convert('RGBA')
     x0, y0, x1, y1 = solid_bbox(ref)
     cw, ch = CANVAS

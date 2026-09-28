@@ -28,7 +28,7 @@ export interface Scheduler {
 export interface HostOptions {
   settings: BoutSettings;
   names: Pair<string>;
-  /** Внешность бойцов; по умолчанию — Бородач против Лысого. */
+  /** Внешность бойцов (Бородач, Лысый, Таксолог); по умолчанию — Бородач против Лысого. */
   fighters?: Pair<FighterId>;
   /** Сид для условий Ямы; по умолчанию — время создания. */
   seed?: number;

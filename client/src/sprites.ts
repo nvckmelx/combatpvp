@@ -119,6 +119,10 @@ function headParts(id: FighterId, view: SpriteView, j: Joints): string {
     parts.push(`<circle class="ph-hair" cx="${f1(x)}" cy="${f1(y - r - 3)}" r="3.4"/>`);
     if (view === 'back') parts.push(`<path class="ph-hair" d="M${f1(x - r)} ${f1(y)} Q${f1(x)} ${f1(y + r + 3)} ${f1(x + r)} ${f1(y)} Q${f1(x)} ${f1(y - r)} ${f1(x - r)} ${f1(y)} Z"/>`);
     else parts.push(`<path class="ph-hair" d="M${f1(x - r + 1)} ${f1(y + 2)} Q${f1(x)} ${f1(y + r + 7)} ${f1(x + r - 1)} ${f1(y + 2)} Q${f1(x)} ${f1(y + 5)} ${f1(x - r + 1)} ${f1(y + 2)} Z"/>`);
+  } else if (id === 'taksolog') {
+    // Тёмная стрижка горшком: ровная чёлка до бровей, сзади — по линии ушей.
+    const bangs = view === 'front' ? y - 1.5 : y + 2.5;
+    parts.push(`<path class="ph-hair" d="M${f1(x - r - 1)} ${f1(bangs + 1.5)} Q${f1(x - r - 1)} ${f1(y - r - 2.5)} ${f1(x)} ${f1(y - r - 2)} Q${f1(x + r + 1)} ${f1(y - r - 2.5)} ${f1(x + r + 1)} ${f1(bangs + 1.5)} L${f1(x + r + 1)} ${f1(bangs)} L${f1(x - r - 1)} ${f1(bangs)} Z"/>`);
   } else {
     // Бритая голова с бликом, щетина спереди.
     parts.push(`<ellipse class="ph-shine" cx="${f1(x - r * 0.35)}" cy="${f1(y - r * 0.45)}" rx="${f1(r * 0.35)}" ry="${f1(r * 0.2)}"/>`);
@@ -144,12 +148,23 @@ export function placeholderSvg(id: FighterId, view: SpriteView, pose: Pose): str
     id === 'lysy'
       ? `<path class="ph-tattoo" d="M${f1(j.shL[0] + 2)} ${f1(j.shL[1] + 3)} q4 3 1 8 M${f1(j.shR[0] - 2)} ${f1(j.shR[1] + 3)} q-4 3 -1 8"/>`
       : '';
-  const arms = limb(j.shL, j.elL, j.fiL, 'ph-limb-skin', 9) + limb(j.shR, j.elR, j.fiR, 'ph-limb-skin', 9) + fist(j.fiL, j.fistL) + fist(j.fiR, j.fistR);
-  const spine = view === 'back' ? `<path class="ph-spine" d="M50 ${f1(j.shL[1] + 6)} L50 ${f1(j.hipL[1] - 8)}"/>` : '';
+  const jacket = id === 'taksolog';
+  // Таксолог одет: куртка поверх футболки, рукава куртки вместо голых рук.
+  const sleeve = jacket ? 'ph-limb-skin ph-sleeve' : 'ph-limb-skin';
+  const arms = limb(j.shL, j.elL, j.fiL, sleeve, jacket ? 10 : 9) + limb(j.shR, j.elR, j.fiR, sleeve, jacket ? 10 : 9) + fist(j.fiL, j.fistL) + fist(j.fiR, j.fistR);
+  const coat = jacket
+    ? `<path class="ph-jacket" d="M${f1(j.shL[0] - 2)} ${f1(j.shL[1] - 1)} L${f1(j.shR[0] + 2)} ${f1(j.shR[1] - 1)} L${f1(j.hipR[0] + 5)} ${f1(j.hipR[1] - 2)} L${f1(j.hipL[0] - 5)} ${f1(j.hipL[1] - 2)} Z"/>${
+        view === 'front'
+          ? `<path class="ph-tee" d="M${f1((j.shL[0] + j.shR[0]) / 2 - 5)} ${f1(j.shL[1])} L${f1((j.shL[0] + j.shR[0]) / 2 + 5)} ${f1(j.shR[1])} L${f1((j.hipL[0] + j.hipR[0]) / 2 + 4)} ${f1(j.hipR[1] - 2)} L${f1((j.hipL[0] + j.hipR[0]) / 2 - 4)} ${f1(j.hipL[1] - 2)} Z"/>`
+          : `<path class="ph-plaid" d="M${f1(j.shL[0] + 2)} ${f1(j.shL[1] + 14)} L${f1(j.shR[0] - 2)} ${f1(j.shR[1] + 14)} M${f1(j.shL[0] + 3)} ${f1(j.shL[1] + 30)} L${f1(j.shR[0] - 3)} ${f1(j.shR[1] + 30)} M50 ${f1(j.shL[1] + 2)} L50 ${f1(j.hipL[1] - 4)}"/>`
+      }`
+    : '';
+  const spine = view === 'back' && !jacket ? `<path class="ph-spine" d="M50 ${f1(j.shL[1] + 6)} L50 ${f1(j.hipL[1] - 8)}"/>` : '';
+  const waist = jacket ? '' : belt;
   const body =
     view === 'front'
-      ? legs + torso + belt + tattoo + neck + headParts(id, view, j) + arms
-      : arms + legs + torso + spine + belt + tattoo + neck + headParts(id, view, j);
+      ? legs + torso + coat + waist + tattoo + neck + headParts(id, view, j) + arms
+      : arms + legs + torso + coat + spine + waist + tattoo + neck + headParts(id, view, j);
   const tilt = j.tilt ? ` transform="rotate(${j.tilt} 50 146)"` : '';
   return `<svg class="ph ph-${id} ph-${view}" viewBox="0 0 100 150" preserveAspectRatio="xMidYMax meet" aria-hidden="true"><ellipse class="ph-shadow" cx="50" cy="147" rx="30" ry="3.5"/><g${tilt}>${body}</g></svg>`;
 }
